@@ -1,0 +1,40 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <meta charset="utf-8" />
+</head>
+<body style="font-family:'Segoe UI'">
+    <h1>Creating an Agent Service</h1>
+    <h2><i>Important build info</i></h2>
+    To build this project you will need to add this url as a Nuget package source before you build<br />
+    <br />
+    <b>https://fuselabs.pkgs.visualstudio.com/DefaultCollection/_packaging/packages/nuget/v3/index.json</b>
+
+    <h2>Getting a subscription key</h2>
+    <ol>
+        <li>Go to <a href="https://intercom.portal.azure-api.net/">Intercom Developer portal</a> and get a subscription to the <b>Intercom for Agents</b> product.</li>
+        <li>Update app.config Subscrtipion key with the value from the portal</li>
+    </ol>
+    <h2>Testing</h2>
+    Using a tool like <a href="http://www.getpostman.com/">PostMan</a> submit:<br />
+    <pre style="margin-left:40px">POST http://localhost:<i>yourport</i>/api/Messages</pre>
+    With Basic Aauth headers <br />
+    <div style="margin-left:40px;">
+        User: <b>Appid</b><br />
+        Password: <b>AppSecret</b><br />
+    </div>
+        and with a JSON payload like<br />
+    <pre style="margin-left:40px;background-color:aliceblue">
+{
+    "Text":"Hello world",
+}</pre>
+    <h2>Register your agent</h2>
+    <ol>
+        <li>Register your agent with the <a href="https://intercom.portal.azure-api.net/">Intercom Developer portal</a> and get an <b>AppId</b> and <b>AppSecret</b> for your agent</li>
+        <li>Update app.config with your <b>AppId</b> and <b>AppSecret</b> key with the values from the portal</li>
+        <li>Test your agent with the <a href="https://intercom-testchannel.azurewebsites.net">Test Channel</a> using your agentId</li>
+        <li>Configure your agent for other channels via the <a href="https://intercom.portal.azure-api.net/">Intercom Developer portal</a> </li>
+    </ol>
+</body>
+</html>
