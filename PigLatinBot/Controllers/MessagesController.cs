@@ -37,58 +37,41 @@ namespace PigLatinBot
         public HttpResponseMessage Post([FromBody]Message message)
         {
             mentionChannels = new List<String>(new string[] { "slack", "groupme", "email", "telegram" });
+            ConnectorClient foo = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
+            ConnectorClient connector = BotConnector.CreateConnectorClient("scratch");
 
-            //Extract the per-user, per-bot data store from the incoming message to see if (a) this is a new user, and (b) whether they've seen 
+            //Extract the per - user, per - bot data store from the incoming message to see if (a) this is a new user, and(b) whether they've seen 
             //the most recent legal documents
             var userData = message.GetBotUserData<pigLatinBotUserData>("v1");
-
-            bool needToSendWelcomeText = false;
-            //if they're new or haven't seen the updated legal documents, send them a message
-            //use the incoming message to set up the outgoing message
-            Message welcomeText = new Message()
-            {
-                Language = "en",
-                To = message.From,
-                From = message.To
-            };
 
             if (userData == null)
                 userData = new pigLatinBotUserData();
 
-            if (userData.isNewUser == true)
-            {
-                welcomeText.Text = "Eyhay Ewbnay.";
-                userData.isNewUser = false;
-                needToSendWelcomeText = true;
-            }
-
-            if (userData.lastReadLegalese < lastModifiedLegalese)
-            {
-                welcomeText.Text += " Egallay ocumentsday areway <http://fuse.microsoft.com|erehay>.";
-                userData.lastReadLegalese = DateTime.UtcNow;
-                needToSendWelcomeText = true;
-            }
-
-            try
-            {
-                //Create a new Bot ConnectorClient to send the message object with
-                Trace.TraceInformation("Decided this was a new user or needed legalese");
-                if (needToSendWelcomeText)
-                {
-                    ConnectorClient foo = new ConnectorClient(new Uri("https://intercomppe.azure-api.net"), new ConnectorClientCredentials());
-                    welcomeText.SetBotUserData(userData, "v1");
-                    //postponing this for now
-                    //var welcomeResponse = foo.Messages.SendMessageAsync(welcomeText).Result;
-                }
-            }
-            catch (HttpOperationException e)
-            {
-                Trace.TraceError("Exception sending OOB Legal Message");
-                String error = JsonConvert.SerializeObject(e.Body);
-                return Request.CreateResponse(HttpStatusCode.OK, error);
-            }
-
             Message replyMessage = message.CreateReplyMessage();
+            replyMessage.Language = "en";
+
+            if (message.Type != "Message" && !handleSystemMessages(message, replyMessage, userData, connector))
+            {
+                replyMessage.Text = translateToPigLatin("PigLatinBot was unable to process the system message.");
+                var welcomeResponse = Request.CreateResponse(HttpStatusCode.InternalServerError, replyMessage);
+                return welcomeResponse;
+            }
+
+            replyMessage.Text = translateToPigLatin(message.Text.Trim());
+            if (mentionChannels.IndexOf(message.From.ChannelId) >= 0)
+            {
+                replyMessage.Text = "@" + message.From.Name + " " + replyMessage.Text;
+                replyMessage.Mentions = new List<Mention>();
+                replyMessage.Mentions.Add(new Mention(message.From, message.From.Name));
+            }
+            var httpResponse = connector.Messages.SendMessageAsync(replyMessage).Result;
+
+            var Response = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
+            return Response;
+        }
+       
+        private bool handleSystemMessages(Message message, Message replyMessage, pigLatinBotUserData userData, ConnectorClient connector)
+        {
             switch (message.Type)
             {
                 case "DeleteUserData":
@@ -96,7 +79,6 @@ namespace PigLatinBot
                     replyMessage.Text = translateToPigLatin("I have deleted your data oh masterful one");
                     userData = new pigLatinBotUserData();
                     Trace.TraceInformation("Clearing user's BotUserData");
-                    replyMessage.SetBotUserData(userData, "v1");
                     break;
 
                 case "EndOfConversation":
@@ -104,18 +86,34 @@ namespace PigLatinBot
                     replyMessage.Type = message.Type;
                     break;
 
+                //if they're new or haven't seen the updated legal documents, send them a message
+                //use the incoming message to set up the outgoing message
                 case "UserAddedToConversation":
                     if (message.Mentions.Count() > 0)
                     {
-                        replyMessage.Text = string.Format(translateToPigLatin("Welcome to the chat") + " {0}, " + translateToPigLatin("I'm ReminderBot. I can help you remember to get things done.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.reminderbot.com)", message.Mentions[0].Text);
-                        replyMessage.Type = message.Type;
-                        replyMessage.ConversationId = null;
-                        replyMessage.ChannelConversationId = null;
-                        replyMessage.Participants.Clear();
-                        replyMessage.TotalParticipants = 2;
-                        ConnectorClient foo = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
-                        //ConnectorClient foo = BotConnector.CreateConnectorClient("ppe");
-                        var welcomeResponse = foo.Messages.SendMessageAsync(replyMessage).Result;
+                        bool needToSendWelcomeText = false;
+
+                        if (userData.isNewUser == true)
+                        {
+                            userData.isNewUser = false;
+                            needToSendWelcomeText = true;
+                        }
+
+                        if (userData.lastReadLegalese < lastModifiedLegalese)
+                        {
+                            userData.lastReadLegalese = DateTime.UtcNow;
+                            needToSendWelcomeText = true;
+                        }
+
+                        if (needToSendWelcomeText)
+                        { 
+                            replyMessage.Text = string.Format(translateToPigLatin("Welcome to the chat") + " {0}, " + translateToPigLatin("I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.Mentions[0].Text);
+                            replyMessage.Type = message.Type;
+                            replyMessage.ConversationId = null;
+                            replyMessage.ChannelConversationId = null;
+                            replyMessage.Participants.Clear();
+                            replyMessage.TotalParticipants = 2;
+                        }
                     }
                     else
                     {
@@ -123,6 +121,11 @@ namespace PigLatinBot
                         replyMessage.Text = string.Format(translateToPigLatin("Bummer, BotConnector didn't tell me who joined"));
                         replyMessage.Type = "Message";
                     }
+                    break;
+
+                case "BotAddedToConversation":
+                    replyMessage.Text = string.Format(translateToPigLatin("Hey there, I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.Mentions[0].Text);
+                    replyMessage.Type = message.Type;
                     break;
 
                 case "UserRemovedFromConversation":
@@ -139,28 +142,13 @@ namespace PigLatinBot
                     }
                     break;
 
-                case "BotAddedToConversation":
-                    replyMessage.Text = string.Format(translateToPigLatin("Hello welcome to the show starring ME"));
-                    replyMessage.Type = message.Type;
-                    break;
+                }
 
-                case "Message":
-                    replyMessage.Text = translateToPigLatin(message.Text.Trim());
-                    if (mentionChannels.IndexOf(message.From.ChannelId) >= 0)
-                    {
-                        replyMessage.Text = "@" + message.From.Name + " " + replyMessage.Text;
-                        replyMessage.Mentions = new List<Mention>();
-                        replyMessage.Mentions.Add(new Mention(message.From, message.From.Name));
-                    }
-                    break;
-
-            }
-
-            replyMessage.Language = "en";
-            var Response = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
-            return Response;
+            replyMessage.SetBotUserData(userData, "v1");
+            var Response = connector.Messages.SendMessageAsync(replyMessage).Result;
+            return true;
         }
-
+        
         private string translateToPigLatin(string message)
         {
             string english = TrimPunctuation(message);
