@@ -11,7 +11,7 @@ using Microsoft.Bot.Connector.MicrosoftInternal;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using System.Diagnostics;
-using Microsoft.Rest;
+//using Microsoft.Rest;
 
 namespace PigLatinBot
 {
@@ -37,7 +37,7 @@ namespace PigLatinBot
         public HttpResponseMessage Post([FromBody]Message message)
         {
             mentionChannels = new List<String>(new string[] { "slack", "groupme", "email", "telegram" });
-            ConnectorClient foo = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
+            //ConnectorClient foo = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
             ConnectorClient connector = BotConnector.CreateConnectorClient("scratch");
 
             //Extract the per - user, per - bot data store from the incoming message to see if (a) this is a new user, and(b) whether they've seen 
@@ -50,28 +50,34 @@ namespace PigLatinBot
             Message replyMessage = message.CreateReplyMessage();
             replyMessage.Language = "en";
 
-            if (message.Type != "Message" && !handleSystemMessages(message, replyMessage, userData, connector))
+            if (message.Type != "Message" && !handleSystemMessages(message, userData, connector))
             {
                 replyMessage.Text = translateToPigLatin("PigLatinBot was unable to process the system message.");
                 var welcomeResponse = Request.CreateResponse(HttpStatusCode.InternalServerError, replyMessage);
                 return welcomeResponse;
             }
 
-            replyMessage.Text = translateToPigLatin(message.Text.Trim());
-            if (mentionChannels.IndexOf(message.From.ChannelId) >= 0)
+            if (message.Type == "Message")
             {
-                replyMessage.Text = "@" + message.From.Name + " " + replyMessage.Text;
-                replyMessage.Mentions = new List<Mention>();
-                replyMessage.Mentions.Add(new Mention(message.From, message.From.Name));
-            }
-            var httpResponse = connector.Messages.SendMessageAsync(replyMessage).Result;
+                if (message.Text == "MessageTypesTest")
+                {
+                    messageTypesTest(message);
+                }
 
-            var Response = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
-            return Response;
+                replyMessage.Text = translateToPigLatin(message.Text.Trim());
+                var Response = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
+                return Response;
+            }
+
+            var ResponseFinal = Request.CreateResponse(HttpStatusCode.OK);
+            return ResponseFinal;
         }
-       
-        private bool handleSystemMessages(Message message, Message replyMessage, pigLatinBotUserData userData, ConnectorClient connector)
+
+        private bool handleSystemMessages(Message message, pigLatinBotUserData userData, ConnectorClient connector)
         {
+            Message replyMessage = message.CreateReplyMessage();
+            message.Language = "en";
+
             switch (message.Type)
             {
                 case "DeleteUserData":
@@ -91,7 +97,7 @@ namespace PigLatinBot
                 case "UserAddedToConversation":
                     if (message.Mentions.Count() > 0)
                     {
-                        bool needToSendWelcomeText = false;
+                        bool needToSendWelcomeText = true;
 
                         if (userData.isNewUser == true)
                         {
@@ -106,13 +112,14 @@ namespace PigLatinBot
                         }
 
                         if (needToSendWelcomeText)
-                        { 
+                        {
                             replyMessage.Text = string.Format(translateToPigLatin("Welcome to the chat") + " {0}, " + translateToPigLatin("I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.Mentions[0].Text);
                             replyMessage.Type = message.Type;
-                            replyMessage.ConversationId = null;
-                            replyMessage.ChannelConversationId = null;
                             replyMessage.Participants.Clear();
                             replyMessage.TotalParticipants = 2;
+                            replyMessage.To = message.Mentions[0].Mentioned;
+                            replyMessage.ConversationId = null;
+                            replyMessage.ChannelConversationId = null;
                         }
                     }
                     else
@@ -142,13 +149,13 @@ namespace PigLatinBot
                     }
                     break;
 
-                }
+            }
 
             replyMessage.SetBotUserData(userData, "v1");
             var Response = connector.Messages.SendMessageAsync(replyMessage).Result;
             return true;
         }
-        
+
         private string translateToPigLatin(string message)
         {
             string english = TrimPunctuation(message);
@@ -271,57 +278,90 @@ namespace PigLatinBot
             cookie.Path = "/";
             return cookie;
         }
+
+        private bool messageTypesTest(Message message)
+        {
+
+            Message dmUser = message.CreateReplyMessage();
+            Message replyDirected = message.CreateReplyMessage();
+            Message replyBroadcast = message.CreateReplyMessage();
+            Message newBroadcast = new Message();
+            Message newDirected = new Message();
+            Message replyMessage = message.CreateReplyMessage();
+            ConnectorClient foo = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
+
+            try
+            {
+                dmUser.Text = "Should go to DM channel";
+                dmUser.Type = "Message";
+                dmUser.ConversationId = null;
+                dmUser.ChannelConversationId = null;
+                dmUser.Participants.Clear();
+                dmUser.To = message.Mentions[0].Mentioned;
+                dmUser.TotalParticipants = 2;
+
+                var dmResponse = foo.Messages.SendMessageAsync(dmUser).Result;
+            }
+            catch (HttpRequestException e)
+            {
+                Trace.TraceError("Failed to send DM, error: {0}", e.InnerException.Message);
+            }
+
+            try
+            {
+                replyBroadcast.Text = "Should go to broadcast channel without a mention";
+                replyBroadcast.Type = "Message";
+                replyBroadcast.ConversationId = null;
+                replyBroadcast.ChannelConversationId = null;
+                replyBroadcast.To = new ChannelAccount() { ChannelId = message.Mentions[0].Mentioned.ChannelId };
+                var bcReply = foo.Messages.SendMessageAsync(replyBroadcast).Result;
+            }
+            catch (HttpRequestException e)
+            {
+                Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
+            }
+
+
+            try
+            {
+                replyDirected.Text = "Should go to broadcast channel with a mention";
+                replyDirected.Type = "Message";
+                replyDirected.ConversationId = null;
+                replyDirected.ChannelConversationId = null;
+                var rdReply = foo.Messages.SendMessageAsync(replyDirected).Result;
+            }
+            catch (HttpRequestException e)
+            {
+                Trace.TraceError("Failed to send broadcast with mention, error: {0}", e.InnerException.Message);
+            }
+
+
+            try
+            {
+                newBroadcast.Text = "Should go to broadcast channel without a mention";
+                newBroadcast.Type = "Message";
+                newBroadcast.To = new ChannelAccount() { ChannelId = message.Mentions[0].Mentioned.ChannelId };
+                var nbReply = foo.Messages.SendMessageAsync(newBroadcast).Result;
+            }
+            catch (HttpRequestException e)
+            {
+                Trace.TraceError("Failed to send new broadcast without mention, error: {0}", e.InnerException.Message);
+            }
+
+
+            try
+            {
+                newDirected.Text = "Should go to group channel directed with a mention";
+                newDirected.Type = "Message";
+                newDirected.To = message.From;
+                var nDReply = foo.Messages.SendMessageAsync(newDirected).Result;
+            }
+            catch (HttpRequestException e)
+            {
+                Trace.TraceError("Failed to send directed group message with mention, error: {0}", e.InnerException.Message);
+            }
+            return true;
+        }
     }
 }
 
-//    public class MessagesController : ApiController
-//{
-//    /// <summary>
-//    /// POST: api/Messages
-//    /// receive a message from a user and reply to it, either directly or as an async delayed response
-//    /// </summary>
-//    /// <param name="message"></param>
-//    [ResponseType(typeof(Message))]
-//    public HttpResponseMessage Post([FromBody]Message message)
-//    {
-//        Message replyMessage = message.CreateReplyMessage();
-//        replyMessage.Text = "Wrong MessageType or MentionCount";
-//        if (message.Type == "UserAddedToConversation")
-//        {
-//            //doesn't work; message goes to group channel instead of DM
-//            replyMessage.Text = "Welcome";
-//            replyMessage.Type = message.Type;
-//            replyMessage.ConversationId = null;
-//            replyMessage.ChannelConversationId = null;
-//            replyMessage.Participants.Clear();
-//            replyMessage.TotalParticipants = 2;
-
-//            //doesn't work; crashes on SendMessageAsyc
-//            try
-//            {
-//                ConnectorClient foo = new ConnectorClient(new Uri("https://intercomppe.azure-api.net"), new ConnectorClientCredentials());
-//                var welcomeResponse = foo.Messages.SendMessageAsync(replyMessage).Result;
-//            }
-//            catch (HttpRequestException e)
-//            {
-//                Trace.TraceError("Crashed trying to SendMessageAsync {0}", e.InnerException.Message);
-//            }
-
-//            //doesn't work, crashes on CreateConnectorClient("ppe")
-//            try
-//            {
-//                ConnectorClient foo = BotConnector.CreateConnectorClient("ppe");
-//                var welcomeResponse = foo.Messages.SendMessageAsync(replyMessage).Result;
-//            }
-//            catch (HttpRequestException e)
-//            {
-//                Trace.TraceError("Crashed trying to CreateConnectorClient('ppe') {0}", e.InnerException.Message);
-//            }
-
-
-//        }
-//        replyMessage.Language = "en";
-//        var Response = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
-//        return Response;
-
-//    }
