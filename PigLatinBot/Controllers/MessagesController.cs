@@ -10,7 +10,9 @@ using Microsoft.Bot.Connector;
 using Microsoft.Bot.Connector.MicrosoftInternal;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Microsoft.Rest;
 using System.Diagnostics;
+using System.Text;
 //using Microsoft.Rest;
 
 namespace PigLatinBot
@@ -24,9 +26,7 @@ namespace PigLatinBot
     [Microsoft.Bot.Connector.Utilities.BotAuthentication]
     public class MessagesController : ApiController
     {
-        private const string SESSION_COOKIE = "counter";
-        private DateTime lastModifiedLegalese = DateTime.Parse("2015-10-01");
-        private List<string> mentionChannels;
+        private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
 
         /// <summary>
         /// POST: api/Messages
@@ -36,32 +36,27 @@ namespace PigLatinBot
         [ResponseType(typeof(Message))]
         public HttpResponseMessage Post([FromBody]Message message)
         {
-            mentionChannels = new List<String>(new string[] { "slack", "groupme", "email", "telegram" });
-            //ConnectorClient foo = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
-            ConnectorClient connector = BotConnector.CreateConnectorClient("scratch");
-
-            //Extract the per - user, per - bot data store from the incoming message to see if (a) this is a new user, and(b) whether they've seen 
-            //the most recent legal documents
-            var userData = message.GetBotUserData<pigLatinBotUserData>("v1");
-
-            if (userData == null)
-                userData = new pigLatinBotUserData();
+            //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
+            //ConnectorClient connector = BotConnector.CreateConnectorClient("scratch");
+            ConnectorClient connector = new ConnectorClient();
 
             Message replyMessage = message.CreateReplyMessage();
             replyMessage.Language = "en";
 
-            if (message.Type != "Message" && !handleSystemMessages(message, userData, connector))
+            if (message.Type != "Message")
             {
-                replyMessage.Text = translateToPigLatin("PigLatinBot was unable to process the system message.");
-                var welcomeResponse = Request.CreateResponse(HttpStatusCode.InternalServerError, replyMessage);
-                return welcomeResponse;
-            }
-
-            if (message.Type == "Message")
-            {
-                if (message.Text == "MessageTypesTest")
+                replyMessage = handleSystemMessages(message, connector);
+                if(replyMessage != null)
                 {
-                    messageTypesTest(message);
+                    var sysMsgResponse = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
+                    return sysMsgResponse;
+                }
+            }
+            else
+            {
+                if (message.Text.Contains("MessageTypesTest"))
+                {
+                    messageTypesTest(message, connector);
                 }
 
                 replyMessage.Text = translateToPigLatin(message.Text.Trim());
@@ -69,11 +64,11 @@ namespace PigLatinBot
                 return Response;
             }
 
-            var ResponseFinal = Request.CreateResponse(HttpStatusCode.OK);
-            return ResponseFinal;
+            var responseOtherwise = Request.CreateResponse(HttpStatusCode.OK);
+            return responseOtherwise;
         }
 
-        private bool handleSystemMessages(Message message, pigLatinBotUserData userData, ConnectorClient connector)
+        private Message handleSystemMessages(Message message, ConnectorClient connector)
         {
             Message replyMessage = message.CreateReplyMessage();
             message.Language = "en";
@@ -81,46 +76,55 @@ namespace PigLatinBot
             switch (message.Type)
             {
                 case "DeleteUserData":
+                    //In this case the DeleteUserData message comes from the user so we can clear the data and set it back directly
+                    var userData = new pigLatinBotUserData();
+                    replyMessage.SetBotUserData("v1", userData);
                     replyMessage.Type = message.Type;
                     replyMessage.Text = translateToPigLatin("I have deleted your data oh masterful one");
-                    userData = new pigLatinBotUserData();
                     Trace.TraceInformation("Clearing user's BotUserData");
-                    break;
+                    return replyMessage;
 
                 case "EndOfConversation":
                     replyMessage.Text = translateToPigLatin("Catch you later alligator");
                     replyMessage.Type = message.Type;
-                    break;
+                    return replyMessage;
 
                 //if they're new or haven't seen the updated legal documents, send them a message
                 //use the incoming message to set up the outgoing message
                 case "UserAddedToConversation":
                     if (message.Mentions.Count() > 0)
                     {
-                        bool needToSendWelcomeText = true;
+                        bool needToSendWelcomeText = false;
 
-                        if (userData.isNewUser == true)
+                        BotData botData = connector.Bots.GetUserData(message.To.Id, message.Mentions[0].Mentioned.Id);
+                        pigLatinBotUserData addedUserData = botData.GetProperty<pigLatinBotUserData>("v1");
+
+                        if (addedUserData == null)
+                            addedUserData = new pigLatinBotUserData();
+
+                        if (addedUserData.isNewUser == true)
                         {
-                            userData.isNewUser = false;
+                            addedUserData.isNewUser = false;
                             needToSendWelcomeText = true;
                         }
 
-                        if (userData.lastReadLegalese < lastModifiedLegalese)
+                        if (addedUserData.lastReadLegalese < lastModifiedPolicies)
                         {
-                            userData.lastReadLegalese = DateTime.UtcNow;
+                            addedUserData.lastReadLegalese = DateTime.UtcNow;
                             needToSendWelcomeText = true;
                         }
 
                         if (needToSendWelcomeText)
                         {
                             replyMessage.Text = string.Format(translateToPigLatin("Welcome to the chat") + " {0}, " + translateToPigLatin("I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.Mentions[0].Text);
-                            replyMessage.Type = message.Type;
-                            replyMessage.Participants.Clear();
-                            replyMessage.TotalParticipants = 2;
                             replyMessage.To = message.Mentions[0].Mentioned;
                             replyMessage.ConversationId = null;
                             replyMessage.ChannelConversationId = null;
+
+                            botData.SetProperty("v1", addedUserData);
+                            connector.Bots.SetUserData(message.To.Id, message.Mentions[0].Mentioned.Id, botData);
                         }
+                        replyMessage.Type = message.Type;
                     }
                     else
                     {
@@ -128,12 +132,12 @@ namespace PigLatinBot
                         replyMessage.Text = string.Format(translateToPigLatin("Bummer, BotConnector didn't tell me who joined"));
                         replyMessage.Type = "Message";
                     }
-                    break;
+                    return replyMessage;
 
                 case "BotAddedToConversation":
                     replyMessage.Text = string.Format(translateToPigLatin("Hey there, I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.Mentions[0].Text);
                     replyMessage.Type = message.Type;
-                    break;
+                    return replyMessage;
 
                 case "UserRemovedFromConversation":
                     if (message.Mentions.Count() > 0)
@@ -147,13 +151,12 @@ namespace PigLatinBot
                         replyMessage.Text = string.Format(translateToPigLatin("Bummer, BotConnector didn't tell me who left"));
                         replyMessage.Type = "Message";
                     }
-                    break;
+                    return replyMessage;
+
+                default:
+                    return null;
 
             }
-
-            replyMessage.SetBotUserData(userData, "v1");
-            var Response = connector.Messages.SendMessageAsync(replyMessage).Result;
-            return true;
         }
 
         private string translateToPigLatin(string message)
@@ -236,131 +239,79 @@ namespace PigLatinBot
                 value.Length - removeFromEnd - removeFromStart);
         }
 
-
-        /// <summary>
-        /// Example retrieving a session cookie and pulling a value from it
-        /// </summary>
-        /// <returns></returns>
-        private TypeT GetSessionCookie<TypeT>(string name)
-        {
-            TypeT value = default(TypeT);
-            CookieHeaderValue cookie = Request.Headers.GetCookies(name).FirstOrDefault();
-            if (cookie != null)
-            {
-                value = JsonConvert.DeserializeObject<TypeT>(cookie[name].Value);
-            }
-            return value;
-        }
-
-        /// <summary>
-        /// Example of tracking session state by serializing into a session cookie
-        /// </summary>
-        /// <param name="value"></param>
-        /// <param name="response"></param>
-        /// <returns></returns>
-        private CookieHeaderValue SetSessionCookie<TypeT>(HttpResponseMessage response, string name, TypeT value, TimeSpan expiry)
-        {
-            CookieHeaderValue cookie = CreateCookieHeaderValue<TypeT>(name, value, expiry);
-            response.Headers.AddCookies(new CookieHeaderValue[] { cookie });
-            return cookie;
-        }
-
-        /// <summary>
-        /// Example of routine to create a cookieHeaderValue used for setting cookie values as part of async callbacks
-        /// </summary>
-        /// <param name="value"></param>
-        /// <returns></returns>
-        private CookieHeaderValue CreateCookieHeaderValue<TypeT>(string name, TypeT value, TimeSpan expiry)
-        {
-            var cookie = new CookieHeaderValue(name, JsonConvert.SerializeObject(value));
-            cookie.Expires = DateTimeOffset.Now + expiry;
-            cookie.Domain = Request.RequestUri.Host;
-            cookie.Path = "/";
-            return cookie;
-        }
-
-        private bool messageTypesTest(Message message)
+        private Message messageTypesTest(Message message, ConnectorClient foo)
         {
 
-            Message dmUser = message.CreateReplyMessage();
-            Message replyDirected = message.CreateReplyMessage();
-            Message replyBroadcast = message.CreateReplyMessage();
-            Message newBroadcast = new Message();
-            Message newDirected = new Message();
-            Message replyMessage = message.CreateReplyMessage();
-            ConnectorClient foo = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
-
+            StringBuilder sb = new StringBuilder();
+            // DM a user 
             try
             {
-                dmUser.Text = "Should go to DM channel";
-                dmUser.Type = "Message";
-                dmUser.ConversationId = null;
-                dmUser.ChannelConversationId = null;
-                dmUser.Participants.Clear();
-                dmUser.To = message.Mentions[0].Mentioned;
-                dmUser.TotalParticipants = 2;
-
-                var dmResponse = foo.Messages.SendMessageAsync(dmUser).Result;
+                Message newDirectToUser = new Message()
+                {
+                    Text = "Should go directly to user",
+                    From = message.To,
+                    To = message.From            
+                };
+                var dmResponse = foo.Messages.SendMessageAsync(newDirectToUser).Result;
+                sb.AppendLine(dmResponse.Text);
+                sb.AppendLine();
             }
-            catch (HttpRequestException e)
+            catch (HttpOperationException e)
             {
                 Trace.TraceError("Failed to send DM, error: {0}", e.InnerException.Message);
             }
 
+            // start new conversation with group of people
+            //try
+            //{
+            //    string channelId = message.From.ChannelId;
+            //    Message newDirectToUser = new Message()
+            //    {
+            //        Text = "Should go to directly to list of people",
+            //        From = message.To,
+            //        To = new ChannelAccount() { ChannelId = channelId },
+            //        Participants = new ChannelAccount[] {
+            //            new ChannelAccount() { ChannelId = channelId, Address = "user1@contoso.com" },
+            //            new ChannelAccount() { ChannelId = channelId, Address = "user2@contoso.com" },
+            //        }
+            //    };
+            //    var dmResponse = foo.Messages.SendMessageAsync(newDirectToUser).Result;
+            //    sb.AppendLine(dmResponse.Text);
+            //    sb.AppendLine();
+            //}
+            //catch (HttpOperationException e)
+            //{
+            //    Trace.TraceError("Failed to send DM, error: {0}", e.InnerException.Message);
+            //}
+            
+            // message to conversation not directed to user using CreateReply
             try
             {
-                replyBroadcast.Text = "Should go to broadcast channel without a mention";
-                replyBroadcast.Type = "Message";
-                replyBroadcast.ConversationId = null;
-                replyBroadcast.ChannelConversationId = null;
-                replyBroadcast.To = new ChannelAccount() { ChannelId = message.Mentions[0].Mentioned.ChannelId };
-                var bcReply = foo.Messages.SendMessageAsync(replyBroadcast).Result;
+                Message replyToConversation = message.CreateReplyMessage("Should go to conversation, but does not address the user that generated it");
+                replyToConversation.To.Address = null;
+                var bcReply = foo.Messages.SendMessageAsync(replyToConversation).Result;
+                sb.AppendLine(bcReply.Text);
+                sb.AppendLine();
             }
-            catch (HttpRequestException e)
+            catch (HttpOperationException e)
             {
                 Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
             }
 
-
+            // reply to to user using CreateReply
             try
             {
-                replyDirected.Text = "Should go to broadcast channel with a mention";
-                replyDirected.Type = "Message";
-                replyDirected.ConversationId = null;
-                replyDirected.ChannelConversationId = null;
-                var rdReply = foo.Messages.SendMessageAsync(replyDirected).Result;
+                Message replyToConversation = message.CreateReplyMessage("Should go to conversation, but addressing the user that generated it");
+                var reply = foo.Messages.SendMessageAsync(replyToConversation).Result;
+                sb.AppendLine(reply.Text);
+                sb.AppendLine();
             }
-            catch (HttpRequestException e)
+            catch (HttpOperationException e)
             {
-                Trace.TraceError("Failed to send broadcast with mention, error: {0}", e.InnerException.Message);
+                Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
             }
 
-
-            try
-            {
-                newBroadcast.Text = "Should go to broadcast channel without a mention";
-                newBroadcast.Type = "Message";
-                newBroadcast.To = new ChannelAccount() { ChannelId = message.Mentions[0].Mentioned.ChannelId };
-                var nbReply = foo.Messages.SendMessageAsync(newBroadcast).Result;
-            }
-            catch (HttpRequestException e)
-            {
-                Trace.TraceError("Failed to send new broadcast without mention, error: {0}", e.InnerException.Message);
-            }
-
-
-            try
-            {
-                newDirected.Text = "Should go to group channel directed with a mention";
-                newDirected.Type = "Message";
-                newDirected.To = message.From;
-                var nDReply = foo.Messages.SendMessageAsync(newDirected).Result;
-            }
-            catch (HttpRequestException e)
-            {
-                Trace.TraceError("Failed to send directed group message with mention, error: {0}", e.InnerException.Message);
-            }
-            return true;
+            return message.CreateReplyMessage(sb.ToString());
         }
     }
 }
