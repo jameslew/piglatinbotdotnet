@@ -36,9 +36,8 @@ namespace PigLatinBot
         [ResponseType(typeof(Message))]
         public HttpResponseMessage Post([FromBody]Message message)
         {
-            //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomscratch.azure-api.net"), new ConnectorClientCredentials());
-            //ConnectorClient connector = BotConnector.CreateConnectorClient("scratch");
-            ConnectorClient connector = new ConnectorClient();
+            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new ConnectorClientCredentials());
+            //ConnectorClient connector = new ConnectorClient();
 
             Message replyMessage = message.CreateReplyMessage();
             replyMessage.Language = "en";
@@ -95,10 +94,16 @@ namespace PigLatinBot
                     if (message.Mentions.Count() > 0)
                     {
                         bool needToSendWelcomeText = false;
+                        pigLatinBotUserData addedUserData = new pigLatinBotUserData();
+                        BotData botData = new BotData();
 
-                        BotData botData = connector.Bots.GetUserData(message.To.Id, message.Mentions[0].Mentioned.Id);
-                        pigLatinBotUserData addedUserData = botData.GetProperty<pigLatinBotUserData>("v1");
-
+                        try
+                        {
+                            botData = connector.Bots.GetUserData(message.To.Id, message.Mentions[0].Mentioned.Id);
+                            addedUserData = botData.GetProperty<pigLatinBotUserData>("v1");
+                        }
+                        catch { }
+        
                         if (addedUserData == null)
                             addedUserData = new pigLatinBotUserData();
 
