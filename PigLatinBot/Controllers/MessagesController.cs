@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
 using Microsoft.Bot.Connector;
-using Microsoft.Bot.Connector.Utilities;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Microsoft.Rest;
