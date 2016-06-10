@@ -12,7 +12,6 @@ using Newtonsoft.Json;
 using Microsoft.Rest;
 using System.Diagnostics;
 using System.Text;
-//using Microsoft.Rest;
 
 namespace PigLatinBot
 {
@@ -22,7 +21,7 @@ namespace PigLatinBot
         public DateTime lastReadLegalese = DateTime.MinValue;
     }
 
-    [Microsoft.Bot.Connector.Utilities.BotAuthentication]
+    [Microsoft.Bot.Connector.BotAuthentication]
     public class MessagesController : ApiController
     {
         private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
@@ -35,8 +34,9 @@ namespace PigLatinBot
         [ResponseType(typeof(Message))]
         public HttpResponseMessage Post([FromBody]Message message)
         {
-            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new ConnectorClientCredentials());
-            //ConnectorClient connector = new ConnectorClient();
+            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomPPE.azure-api.net"), new ConnectorClientCredentials());
+            //ConnectorClient connector = new ConnectorClient(appId, appsecret);
+           //ConnectorClient connector = new ConnectorClient();
 
             Message replyMessage = message.CreateReplyMessage();
             replyMessage.Language = "en";
@@ -46,8 +46,7 @@ namespace PigLatinBot
                 replyMessage = handleSystemMessages(message, connector);
                 if(replyMessage != null)
                 {
-                    var sysMsgResponse = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
-                    return sysMsgResponse;
+                    var reply = connector.Messages.SendMessageAsync(replyMessage).Result;
                 }
             }
             else
@@ -76,7 +75,16 @@ namespace PigLatinBot
                 case "DeleteUserData":
                     //In this case the DeleteUserData message comes from the user so we can clear the data and set it back directly
                     var userData = new pigLatinBotUserData();
+
+                    // The easy way, just reply with the message
                     replyMessage.SetBotUserData("v1", userData);
+
+                    //the hard way; not piggy backing on the reply message
+                    //BotData deleteBotData = connector.Bots.GetUserData(message.To.Id, message.From.Id);
+                    //pigLatinBotUserData deletedUserData = new pigLatinBotUserData();
+                    //deleteBotData.SetProperty("v1", deletedUserData);
+                    //connector.Bots.SetUserData(message.To.Id, message.From.Id, deleteBotData);
+                    
                     replyMessage.Type = message.Type;
                     replyMessage.Text = translateToPigLatin("I have deleted your data oh masterful one");
                     Trace.TraceInformation("Clearing user's BotUserData");
