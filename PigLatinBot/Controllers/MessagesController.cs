@@ -21,7 +21,7 @@ namespace PigLatinBot
         public DateTime lastReadLegalese = DateTime.MinValue;
     }
 
-    [Microsoft.Bot.Connector.BotAuthentication]
+   // [Microsoft.Bot.Connector.BotAuthentication]
     public class MessagesController : ApiController
     {
         private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
@@ -31,22 +31,24 @@ namespace PigLatinBot
         /// receive a message from a user and reply to it, either directly or as an async delayed response
         /// </summary>
         /// <param name="message"></param>
-        [ResponseType(typeof(Message))]
-        public HttpResponseMessage Post([FromBody]Message message)
+        [ResponseType(typeof(Microsoft.Bot.Connector.Activity))]
+        public HttpResponseMessage Post([FromBody]Activity message)
         {
-            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomPPE.azure-api.net"), new ConnectorClientCredentials());
+            //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
             //ConnectorClient connector = new ConnectorClient(appId, appsecret);
-           //ConnectorClient connector = new ConnectorClient();
+            //ConnectorClient connector = new ConnectorClient();
+            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
-            Message replyMessage = message.CreateReplyMessage();
-            replyMessage.Language = "en";
 
-            if (message.Type != "Message")
+            Activity replyMessage = message.CreateReply();
+            replyMessage.Locale = "en";
+
+            if (message.Type != "message")
             {
                 replyMessage = handleSystemMessages(message, connector);
                 if(replyMessage != null)
                 {
-                    var reply = connector.Messages.SendMessageAsync(replyMessage).Result;
+                    var reply = connector.Conversations.ReplyToConversationAsync(message.Conversation.Id, replyMessage).Result;
                 }
             }
             else
@@ -57,7 +59,8 @@ namespace PigLatinBot
                 }
 
                 replyMessage.Text = translateToPigLatin(message.Text.Trim());
-                var Response = Request.CreateResponse(HttpStatusCode.OK, replyMessage);
+                connector.Conversations.ReplyToConversation(replyMessage.Conversation.Id, replyMessage);
+                var Response = Request.CreateResponse(HttpStatusCode.OK);
                 return Response;
             }
 
@@ -65,10 +68,11 @@ namespace PigLatinBot
             return responseOtherwise;
         }
 
-        private Message handleSystemMessages(Message message, ConnectorClient connector)
+        private Activity handleSystemMessages(Activity message, ConnectorClient connector)
         {
-            Message replyMessage = message.CreateReplyMessage();
-            message.Language = "en";
+
+            Activity replyMessage = message.CreateReply();
+            message.Locale = "en";
 
             switch (message.Type)
             {
@@ -76,8 +80,9 @@ namespace PigLatinBot
                     //In this case the DeleteUserData message comes from the user so we can clear the data and set it back directly
                     var userData = new pigLatinBotUserData();
 
+                    StateClient pigLatinStateClient = new StateClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
                     // The easy way, just reply with the message
-                    replyMessage.SetBotUserData("v1", userData);
+                    //pigLatinStateClient.BotState.GetUserData("v1", userData);
 
                     //the hard way; not piggy backing on the reply message
                     //BotData deleteBotData = connector.Bots.GetUserData(message.To.Id, message.From.Id);
@@ -98,43 +103,45 @@ namespace PigLatinBot
                 //if they're new or haven't seen the updated legal documents, send them a message
                 //use the incoming message to set up the outgoing message
                 case "UserAddedToConversation":
-                    if (message.Mentions.Count() > 0)
+                    if (message.Entities.Where(p=>p.Type == "Mention").Count() > 0)
                     {
                         bool needToSendWelcomeText = false;
-                        pigLatinBotUserData addedUserData = new pigLatinBotUserData();
-                        BotData botData = new BotData();
+                        //pigLatinBotUserData addedUserData = new pigLatinBotUserData();
+                        //BotData botData = new BotData();
 
                         try
                         {
-                            botData = connector.Bots.GetUserData(message.To.Id, message.Mentions[0].Mentioned.Id);
-                            addedUserData = botData.GetProperty<pigLatinBotUserData>("v1");
+                        //    botData = connector.Bots.GetUserData(message.To.Id, message.Mentions[0].Mentioned.Id);
+                        //    addedUserData = botData.GetProperty<pigLatinBotUserData>("v1");
                         }
                         catch { }
         
-                        if (addedUserData == null)
-                            addedUserData = new pigLatinBotUserData();
+                        //if (addedUserData == null)
+                        //    addedUserData = new pigLatinBotUserData();
 
-                        if (addedUserData.isNewUser == true)
-                        {
-                            addedUserData.isNewUser = false;
-                            needToSendWelcomeText = true;
-                        }
+                        //if (addedUserData.isNewUser == true)
+                        //{
+                        //    addedUserData.isNewUser = false;
+                        //    needToSendWelcomeText = true;
+                        //}
 
-                        if (addedUserData.lastReadLegalese < lastModifiedPolicies)
-                        {
-                            addedUserData.lastReadLegalese = DateTime.UtcNow;
-                            needToSendWelcomeText = true;
-                        }
+                        //if (addedUserData.lastReadLegalese < lastModifiedPolicies)
+                        //{
+                        //    addedUserData.lastReadLegalese = DateTime.UtcNow;
+                        //    needToSendWelcomeText = true;
+                        //}
 
                         if (needToSendWelcomeText)
                         {
-                            replyMessage.Text = string.Format(translateToPigLatin("Welcome to the chat") + " {0}, " + translateToPigLatin("I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.Mentions[0].Text);
-                            replyMessage.To = message.Mentions[0].Mentioned;
-                            replyMessage.ConversationId = null;
-                            replyMessage.ChannelConversationId = null;
+                            var t3 = message.Entities.Where(p => p.Type == "Mention");
+                            var mention3 = (Mention)t3.First();
+                            replyMessage.Text = string.Format(translateToPigLatin("Welcome to the chat") + " {0}, " + translateToPigLatin("I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", mention3.Text);
+                            replyMessage.Recipient = mention3.Mentioned;
+                            replyMessage.Conversation = null;
+ //                           replyMessage.ChannelConversationId = null;
 
-                            botData.SetProperty("v1", addedUserData);
-                            connector.Bots.SetUserData(message.To.Id, message.Mentions[0].Mentioned.Id, botData);
+                            //botData.SetProperty("v1", addedUserData);
+                            //connector.Bots.SetUserData(message.To.Id, message.Mentions[0].Mentioned.Id, botData);
                         }
                         replyMessage.Type = message.Type;
                     }
@@ -147,14 +154,21 @@ namespace PigLatinBot
                     return replyMessage;
 
                 case "BotAddedToConversation":
-                    replyMessage.Text = string.Format(translateToPigLatin("Hey there, I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.Mentions[0].Text);
+                    var t = message.Entities.Where(p => p.Type == "Mention");
+                    var mention = (Mention)t.First();
+                    replyMessage.Text = string.Format(translateToPigLatin("Hey there, I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", mention.Text);
                     replyMessage.Type = message.Type;
                     return replyMessage;
 
                 case "UserRemovedFromConversation":
-                    if (message.Mentions.Count() > 0)
+
+                    if (message.Entities.Where(p => p.Type == "Mention").Count() > 0)
                     {
-                        replyMessage.Text = string.Format("{0}", message.Mentions[0].Text) + translateToPigLatin(" has Left the building");
+                        var t2 = message.Entities.Where(p => p.Type == "Mention");
+                        var mention2 = (Mention)t2.First();
+                        replyMessage.Recipient = mention2.Mentioned;
+
+                        replyMessage.Text = string.Format("{0}", mention2.Text) + translateToPigLatin(" has Left the building");
                         replyMessage.Type = message.Type;
                     }
                     else
@@ -251,21 +265,21 @@ namespace PigLatinBot
                 value.Length - removeFromEnd - removeFromStart);
         }
 
-        private Message messageTypesTest(Message message, ConnectorClient foo)
+        private Activity messageTypesTest(Activity message, ConnectorClient foo)
         {
 
             StringBuilder sb = new StringBuilder();
             // DM a user 
             try
             {
-                Message newDirectToUser = new Message()
+                Activity newDirectToUser = new Activity()
                 {
                     Text = "Should go directly to user",
-                    From = message.To,
-                    To = message.From            
+                    From = message.Recipient,
+                    Recipient = message.From            
                 };
-                var dmResponse = foo.Messages.SendMessageAsync(newDirectToUser).Result;
-                sb.AppendLine(dmResponse.Text);
+                var dmResponse = foo.Conversations.StartConversationAsync(newDirectToUser).Result;
+                sb.AppendLine(dmResponse.Message);
                 sb.AppendLine();
             }
             catch (HttpOperationException e)
@@ -299,10 +313,9 @@ namespace PigLatinBot
             // message to conversation not directed to user using CreateReply
             try
             {
-                Message replyToConversation = message.CreateReplyMessage("Should go to conversation, but does not address the user that generated it");
-                replyToConversation.To.Address = null;
-                var bcReply = foo.Messages.SendMessageAsync(replyToConversation).Result;
-                sb.AppendLine(bcReply.Text);
+                Activity replyToConversation = message.CreateReply("Should go to conversation, but does not address the user that generated it");
+                var bcReply = foo.Conversations.ReplyToConversationAsync(message.Conversation.Id, replyToConversation).Result;
+                sb.AppendLine(bcReply.Message);
                 sb.AppendLine();
             }
             catch (HttpOperationException e)
@@ -313,9 +326,9 @@ namespace PigLatinBot
             // reply to to user using CreateReply
             try
             {
-                Message replyToConversation = message.CreateReplyMessage("Should go to conversation, but addressing the user that generated it");
-                var reply = foo.Messages.SendMessageAsync(replyToConversation).Result;
-                sb.AppendLine(reply.Text);
+                Activity replyToConversation = message.CreateReply("Should go to conversation, but addressing the user that generated it");
+                var reply = foo.Conversations.ReplyToConversationAsync(message.Conversation.Id, replyToConversation).Result;
+                sb.AppendLine(reply.Message);
                 sb.AppendLine();
             }
             catch (HttpOperationException e)
@@ -323,7 +336,7 @@ namespace PigLatinBot
                 Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
             }
 
-            return message.CreateReplyMessage(sb.ToString());
+            return message.CreateReply(sb.ToString());
         }
     }
 }
