@@ -12,6 +12,9 @@ using Newtonsoft.Json;
 using Microsoft.Rest;
 using System.Diagnostics;
 using System.Text;
+using Newtonsoft.Json.Linq;
+using System.Threading;
+using System.Web.Http.Controllers;
 
 namespace PigLatinBot
 {
@@ -21,7 +24,23 @@ namespace PigLatinBot
         public DateTime lastReadLegalese = DateTime.MinValue;
     }
 
-    //[Microsoft.Bot.Connector.BotAuthentication]
+    public class PigLatinAuth : Microsoft.Bot.Connector.BotAuthentication
+    {
+        public override string OpenIdConfigurationUrl
+        {
+            get
+            {
+                return "https://aps-dev-0-skype.cloudapp.net/v1/.well-known/openidconfiguration";
+            }
+        }
+
+        public override Task OnAuthorizationAsync(HttpActionContext actionContext, CancellationToken cancellationToken)
+        {
+            return base.OnAuthorizationAsync(actionContext, cancellationToken);
+        }
+    }
+
+    [PigLatinAuth]
     public class MessagesController : ApiController
     {
         private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
@@ -32,49 +51,56 @@ namespace PigLatinBot
         /// </summary>
         /// <param name="message"></param>
         [ResponseType(typeof(Microsoft.Bot.Connector.Activity))]
-        public async Task<HttpResponseMessage> Post([FromBody]Activity message)
+        public virtual async Task<HttpResponseMessage> Post([FromBody] object obj)
         {
-            //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            //ConnectorClient connector = new ConnectorClient(appId, appsecret);
-            //ConnectorClient connector = new ConnectorClient();
-            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
+            Activity[] activities = (obj is JObject) ? new Activity[] { ((JObject)obj).ToObject<Activity>() } : ((JArray)obj).ToObject<Activity[]>();
 
-            Activity replyMessage = message.CreateReply();
-            replyMessage.Locale = "en-Us";
-
-            if (message.Type != ActivityTypes.Message)
+            foreach (var message in activities)
             {
-                replyMessage = await handleSystemMessagesAsync(message, connector);
-                if(replyMessage != null)
+                //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
+                //ConnectorClient connector = new ConnectorClient(appId, appsecret);
+                //ConnectorClient connector = new ConnectorClient();
+                ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
+
+
+                Activity replyMessage = message.CreateReply();
+                replyMessage.Locale = "en-Us";
+
+                if (message.GetActivityType() != ActivityTypes.Message)
                 {
-                    var reply = await connector.Conversations.ReplyToActivityAsync(replyMessage);
+                    replyMessage = await handleSystemMessagesAsync(message, connector);
+                    if (replyMessage != null)
+                    {
+                        var reply = await connector.Conversations.ReplyToActivityAsync(replyMessage);
+                    }
+                }
+                else
+                {
+                    if (message.Text.Contains("MessageTypesTest"))
+                    {
+                        await messageTypesTest(message, connector);
+                    }
+
+                    var Response = Request.CreateResponse(HttpStatusCode.OK); ;
+                    replyMessage.Text = translateToPigLatin(message.Text.Trim());
+                    try
+                    {
+                        //var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
+                        var httpResponse = await connector.Conversations.SendToConversationAsync(replyMessage);
+                    }
+                    catch (HttpResponseException e)
+                    {
+                        Trace.WriteLine(e.Message);
+                        Response = Request.CreateResponse(HttpStatusCode.InternalServerError);
+                    }
+
+                    return Response;
                 }
             }
-            else
-            {
-                if (message.Text.Contains("MessageTypesTest"))
-                {
-                    await messageTypesTest(message, connector);
-                }
-
-                var Response = Request.CreateResponse(HttpStatusCode.OK); ;
-                replyMessage.Text = translateToPigLatin(message.Text.Trim());
-                try
-                {
-                    var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
-                }
-                catch (HttpResponseException e)
-                {
-                    Trace.WriteLine(e.Message);
-                    Response = Request.CreateResponse(HttpStatusCode.InternalServerError);
-                }
-
-                return Response;
-            }
-
             var responseOtherwise = Request.CreateResponse(HttpStatusCode.OK);
             return responseOtherwise;
         }
+         
 
         private async Task<Activity> handleSystemMessagesAsync(Activity message, ConnectorClient connector)
         {
@@ -85,7 +111,7 @@ namespace PigLatinBot
             Activity replyMessage = message.CreateReply();
             message.Locale = "en";
 
-            switch (message.Type)
+            switch (message.GetActivityType())
             {
                 case ActivityTypes.DeleteUserData:
                     //In this case the DeleteUserData message comes from the user so we can clear the data and set it back directly
@@ -147,13 +173,12 @@ namespace PigLatinBot
                             addedUserData.lastReadLegalese = DateTime.UtcNow;
                             needToSendWelcomeText = true;
                         }
-
                         if (needToSendWelcomeText)
                         {
                             addedMessage.Text = string.Format(translateToPigLatin("Welcome to the chat") + " {0}, " + translateToPigLatin("I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", added.Name);
                             addedMessage.Recipient = added;
                             addedMessage.Conversation = null;
-                    
+ 
                             try
                             {
                                 botData.SetProperty("v1", addedUserData);
@@ -163,7 +188,7 @@ namespace PigLatinBot
                             {
                                 Trace.WriteLine(e.Message);
                             }
-
+                            
                             var ConversationId = await connector.Conversations.CreateDirectConversationAsync(message.Recipient, message.From);
                             addedMessage.Conversation = new ConversationAccount(id: ConversationId.Id);
                             var reply = await connector.Conversations.ReplyToActivityAsync(addedMessage);
@@ -351,25 +376,34 @@ namespace PigLatinBot
                 replyToConversation.Recipient = message.From;
                 replyToConversation.Type = ActivityTypes.MessageCard;
                 replyToConversation.Attachments = new List<Attachment>();
+                
+                List<CardImage> cardImages = new List<CardImage>();
+                cardImages.Add(new CardImage(url:"http://3.bp.blogspot.com/-7zDiZVD5kAk/T47LSvDM_jI/AAAAAAAAByM/AUhkdynaJ1Y/s200/i-speak-pig-latin.png"));
 
-                Attachment plAttachment = new Attachment();
-                plAttachment.ContentType = "application/vnd.microsoft.card.hero";
-                HeroCard plCard = new HeroCard();
-                plCard.Title = translateToPigLatin("I'm a hero card, aren't I fancy?");
-                plCard.Subtitle = "Pig Latin Wikipedia Page";
+                List<Microsoft.Bot.Connector.CardAction> cardButtons = new List<Microsoft.Bot.Connector.CardAction>();
 
-                plCard.Images = new List<Image>();
-                plCard.Images.Add(new Image(url:"http://3.bp.blogspot.com/-7zDiZVD5kAk/T47LSvDM_jI/AAAAAAAAByM/AUhkdynaJ1Y/s200/i-speak-pig-latin.png"));
+                Microsoft.Bot.Connector.CardAction plButton = new Microsoft.Bot.Connector.CardAction()
+                {
+                    Value = "https://en.wikipedia.org/wiki/Pig_Latin",
+                    Type = "openUrl",
+                    Title = "WikiPedia Page"
+                };
+                cardButtons.Add(plButton);
 
-                plCard.Buttons = new List<Microsoft.Bot.Connector.Action>();
-                Microsoft.Bot.Connector.Action plButton = new Microsoft.Bot.Connector.Action();
-                plButton.Value = "https://en.wikipedia.org/wiki/Pig_Latin";
-                plButton.Type = "openUrl";
-                plButton.Title = "WikiPedia";
-                plCard.Buttons.Add(plButton);
+                HeroCard plCard = new HeroCard()
+                {
+                    Title = translateToPigLatin("I'm a hero card, aren't I fancy?"),
+                    Subtitle = "Pig Latin Wikipedia Page",
+                    Images = cardImages,
+                    Buttons = cardButtons
+                };
 
-                plAttachment.Content = plCard;
-
+                Attachment plAttachment = new Attachment()
+                {
+                    ContentType = "application/vnd.microsoft.card.hero",
+                    Content = plCard
+                };
+                
                 replyToConversation.Attachments.Add(plAttachment);
 
                 var reply = await connector.Conversations.ReplyToActivityAsync(replyToConversation);
@@ -380,7 +414,6 @@ namespace PigLatinBot
             {
                 Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
             }
-
             return message.CreateReply(sb.ToString());
         }
     }
