@@ -24,8 +24,8 @@ namespace PigLatinBot
         public DateTime lastReadLegalese = DateTime.MinValue;
     }
 
-    //[BotAuthentication]
-    [BotAuthentication(OpenIdConfigurationUrl = "https://aps-dev-0-skype.cloudapp.net/v1/.well-known/openidconfiguration")]
+    [BotAuthentication]
+    //[BotAuthentication(OpenIdConfigurationUrl = "https://aps-dev-0-skype.cloudapp.net/v1/.well-known/openidconfiguration")]
     public class MessagesController : ApiController
     {
         private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
@@ -36,71 +36,66 @@ namespace PigLatinBot
         /// </summary>
         /// <param name="message"></param>
         [ResponseType(typeof(Activity))]
-        public virtual async Task<HttpResponseMessage> Post([FromBody] object obj)
+        public virtual async Task<HttpResponseMessage> Post([FromBody] Activity message) //[Resolved in tonight's build]
         {
-            Activity[] activities = (obj is JObject) ? new Activity[] { ((JObject)obj).ToObject<Activity>() } : ((JArray)obj).ToObject<Activity[]>();
+             //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
+            //ConnectorClient connector = new ConnectorClient(appId, appsecret);
+            //ConnectorClient connector = new ConnectorClient();
+            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
-            foreach (var message in activities)
+            Activity replyMessage = message.CreateReply();
+            replyMessage.Locale = "en-Us";
+            replyMessage.TextFormat = TextFormatTypes.Plain;
+
+            if (message.GetActivityType() != ActivityTypes.Message)
             {
-                //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-                //ConnectorClient connector = new ConnectorClient(appId, appsecret);
-                //ConnectorClient connector = new ConnectorClient();
-                ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
-
-
-                Activity replyMessage = message.CreateReply();
-                replyMessage.Locale = "en-Us";
-                replyMessage.Type = message.Type;
-
-                if (message.GetActivityType() != ActivityTypes.Message)
+                replyMessage = await handleSystemMessagesAsync(message, connector);
+                if (replyMessage != null)
                 {
-                    replyMessage = await handleSystemMessagesAsync(message, connector);
-                    if (replyMessage != null)
-                    {
-                        var reply = await connector.Conversations.ReplyToActivityAsync(replyMessage);
-                    }
+                    var reply = await connector.Conversations.ReplyToActivityAsync(replyMessage);
                 }
-                else
+            }
+            else
+            {
+                if (message.Text.Contains("MessageTypesTest"))
                 {
-                    if (message.Text.Contains("MessageTypesTest"))
-                    {
-                        Activity mtResult = await messageTypesTest(message, connector);
-                        mtResult.Type = message.Type;
-                        await connector.Conversations.ReplyToActivityAsync(mtResult);
-                    }
-                    else if (message.Text.Contains("DataTypesTest"))
-                    {
-                        Activity dtResult = await dataTypesTest(message, connector);
-                        dtResult.Type = message.Type;
-                        await connector.Conversations.ReplyToActivityAsync(dtResult);
-                    }
-                   
+                    Activity mtResult = await messageTypesTest(message, connector);
+                    await connector.Conversations.ReplyToActivityAsync(mtResult);
+                }
+                else if (message.Text.Contains("DataTypesTest"))
+                {
+                    Activity dtResult = await dataTypesTest(message, connector);
+                    await connector.Conversations.ReplyToActivityAsync(dtResult);
+                }
+                else if (message.Text.Contains("CardTypesTest"))
+                {
+                    Activity ctResult = await cardTypesTest(message, connector);
+                    await connector.Conversations.ReplyToActivityAsync(ctResult);
+                }
+
                     try
-                    {
-                        replyMessage.Text = translateToPigLatin(message.Text);
-                        var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
-                    }
-                    catch (HttpResponseException e)
-                    {
-                        Trace.WriteLine(e.Message);
-                        var Response = Request.CreateResponse(HttpStatusCode.InternalServerError);
-                        return Response;
-                    }
+                {
+                    replyMessage.Text = translateToPigLatin(message.Text);
+                    var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
+                }
+                catch (HttpResponseException e)
+                {
+                    Trace.WriteLine(e.Message);
+                    var Response = Request.CreateResponse(HttpStatusCode.InternalServerError);
+                    return Response;
                 }
             }
             var responseOtherwise = Request.CreateResponse(HttpStatusCode.OK);
             return responseOtherwise;
         }
-         
 
-        private async Task<Activity> handleSystemMessagesAsync(Activity message, ConnectorClient connector)
+    private async Task<Activity> handleSystemMessagesAsync(Activity message, ConnectorClient connector)
         {
 
             StateClient pigLatinStateClient = new StateClient(new Uri(message.ChannelId=="emulator"?message.ServiceUrl: "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
             BotState botState = new BotState(pigLatinStateClient);
 
             Activity replyMessage = message.CreateReply();
-            replyMessage.Type = "message/text";
             message.Locale = "en";
 
             switch (message.GetActivityType())
@@ -295,7 +290,7 @@ namespace PigLatinBot
                 Activity newDirectToUser = new Activity()
                 {
                     Text = "Should go directly to user",
-                    Type = message.Type,
+                    Type = "message",
                     From = message.Recipient,
                     Recipient = message.From,
                     ChannelId = message.ChannelId
@@ -339,8 +334,6 @@ namespace PigLatinBot
             try
             {
                 Activity replyToConversation = message.CreateReply("Should go to conversation, but does not address the user that generated it");
-                replyToConversation.Type = message.Type;
-                //var bcReply = await connector.Conversations.ReplyToActivityAsync(replyToConversation);
                 var bcReply = await connector.Conversations.SendToConversationAsync(replyToConversation);
                 if(bcReply != null)
                     sb.AppendLine(bcReply.Message);
@@ -355,8 +348,6 @@ namespace PigLatinBot
             {
                 Activity replyToConversation = message.CreateReply("Should go to conversation, but addressing the user that generated it");
                 replyToConversation.Recipient = message.From;
-                replyToConversation.Type = message.Type;
-                //var reply = await connector.Conversations.ReplyToActivityAsync(replyToConversation);
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
                 if (reply != null)
                     sb.AppendLine(reply.Message);
@@ -366,16 +357,25 @@ namespace PigLatinBot
                 Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
             }
 
-            // reply to to everyone with a PigLatin Card
+            return message.CreateReply(translateToPigLatin("Completed MessageTypesTest"));
+        }
+
+        private async Task<Activity> cardTypesTest(Activity message, ConnectorClient connector)
+        {
+
+            StringBuilder sb = new StringBuilder();
+
+            // reply to to everyone with a PigLatin Hero Card
             try
             {
-                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a fancy schmancy card"));
+                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a fancy schmancy hero card"));
                 replyToConversation.Recipient = message.From;
-                replyToConversation.Type = message.ChannelId == "skype" ? "message/card" : "message";
+                replyToConversation.Type = "message";
                 replyToConversation.Attachments = new List<Attachment>();
-                
+
                 List<CardImage> cardImages = new List<CardImage>();
-                cardImages.Add(new CardImage(url:"https://3.bp.blogspot.com/-7zDiZVD5kAk/T47LSvDM_jI/AAAAAAAAByM/AUhkdynaJ1Y/s200/i-speak-pig-latin.png"));
+                cardImages.Add(new CardImage(url: "https://3.bp.blogspot.com/-7zDiZVD5kAk/T47LSvDM_jI/AAAAAAAAByM/AUhkdynaJ1Y/s200/i-speak-pig-latin.png"));
+                cardImages.Add(new CardImage(url: "https://2.bp.blogspot.com/-Ab3oCVhOBjI/Ti23EzV3WCI/AAAAAAAAB1o/tiTeBslO6iU/s1600/bacon.jpg"));
 
                 List<CardAction> cardButtons = new List<CardAction>();
 
@@ -399,7 +399,6 @@ namespace PigLatinBot
                 replyToConversation.Attachments.Add(plAttachment);
 
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-                //var reply = await connector.Conversations.ReplyToActivityAsync(replyToConversation);
                 if (reply != null)
                     sb.AppendLine(reply.Message);
             }
@@ -407,7 +406,203 @@ namespace PigLatinBot
             {
                 Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
             }
-            return message.CreateReply(translateToPigLatin("Completed MessageTypesTest"));
+
+            // reply to to everyone with a PigLatin Thumbnail Card
+            try
+            {
+                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a smaller, but still fancy thumbnail card"));
+                replyToConversation.Recipient = message.From;
+                replyToConversation.Type = "message";
+                replyToConversation.Attachments = new List<Attachment>();
+
+                List<CardImage> cardImages = new List<CardImage>();
+                cardImages.Add(new CardImage(url: "https://3.bp.blogspot.com/-7zDiZVD5kAk/T47LSvDM_jI/AAAAAAAAByM/AUhkdynaJ1Y/s200/i-speak-pig-latin.png"));
+
+                List<CardAction> cardButtons = new List<CardAction>();
+
+                CardAction plButton = new CardAction()
+                {
+                    Value = "https://en.wikipedia.org/wiki/Pig_Latin",
+                    Type = "openUrl",
+                    Title = "WikiPedia Page"
+                };
+                cardButtons.Add(plButton);
+
+                ThumbnailCard plCard = new ThumbnailCard()
+                {
+                    Title = translateToPigLatin("I'm a hero card, aren't I fancy?"),
+                    Subtitle = "Pig Latin Wikipedia Page",
+                    Images = cardImages,
+                    Buttons = cardButtons
+                };
+
+                Attachment plAttachment = plCard.ToAttachment();
+                replyToConversation.Attachments.Add(plAttachment);
+
+                var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
+                if (reply != null)
+                    sb.AppendLine(reply.Message);
+            }
+            catch (HttpOperationException e)
+            {
+                Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
+            }
+
+            // reply to to everyone with a PigLatin Signin card
+            try
+            {
+                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, sign-in card"));
+                replyToConversation.Recipient = message.From;
+                replyToConversation.Type = "message";
+                replyToConversation.Attachments = new List<Attachment>();
+
+                List<CardAction> cardButtons = new List<CardAction>();
+
+                CardAction plButton = new CardAction()
+                {
+                    Value = "https://spott.cloudapp.net/setup?id=838303b66d9a4f4c7308fa465c5abf74",
+                    Type = "signin",
+                    Title = "Connect"
+                };
+                cardButtons.Add(plButton);
+
+                SigninCard plCard = new SigninCard(title: "You need to authorize me to access Spotify", button: plButton);
+
+                Attachment plAttachment = plCard.ToAttachment();
+                replyToConversation.Attachments.Add(plAttachment);
+
+                var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
+                if (reply != null)
+                    sb.AppendLine(reply.Message);
+            }
+            catch (HttpOperationException e)
+            {
+                Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
+            }
+
+
+            // reply to to everyone with a PigLatin Receipt Card
+            try
+            {
+                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a smaller, but still fancy thumbnail card"));
+                replyToConversation.Recipient = message.From;
+                replyToConversation.Type = "message";
+                replyToConversation.Attachments = new List<Attachment>();
+
+                List<CardImage> cardImages = new List<CardImage>();
+                cardImages.Add(new CardImage(url: "https://3.bp.blogspot.com/-7zDiZVD5kAk/T47LSvDM_jI/AAAAAAAAByM/AUhkdynaJ1Y/s200/i-speak-pig-latin.png"));
+
+                List<CardAction> cardButtons = new List<CardAction>();
+
+                CardAction plButton = new CardAction()
+                {
+                    Value = "https://en.wikipedia.org/wiki/Pig_Latin",
+                    Type = "openUrl",
+                    Title = "WikiPedia Page"
+                };
+                cardButtons.Add(plButton);
+
+                ReceiptItem lineItem1 = new ReceiptItem()
+                {
+                    Title = translateToPigLatin("Pork Shoulder"),
+                    Subtitle = translateToPigLatin("8 lbs"),
+                    Text = null,
+                    Image = new CardImage(url: "https://3.bp.blogspot.com/-_sl51G9E5io/TeFkYbJ2lDI/AAAAAAAAAL8/Ug_naHX6pAk/s400/porkshoulder.jpg"),
+                    Price = "16.25",
+                    Quantity = "1",
+                    Tap = null
+                };
+
+                ReceiptItem lineItem2 = new ReceiptItem()
+                {
+                    Title=translateToPigLatin("Bacon"),
+                    Subtitle=translateToPigLatin("5 lbs"),
+                    Text=null,
+                    Image=new CardImage(url: "http://www.drinkamara.com/wp-content/uploads/2015/03/bacon_blog_post.jpg"),
+                    Price="34.50",
+                    Quantity="2",
+                    Tap= null
+                };
+
+                List<ReceiptItem> receiptList = new List<ReceiptItem>();
+                receiptList.Add(lineItem1);
+                receiptList.Add(lineItem2);
+
+                ReceiptCard plCard = new ReceiptCard()
+                {
+                    Title = translateToPigLatin("I'm a receipt card, aren't I fancy?"),
+                    Buttons = cardButtons,
+                    Items = receiptList,
+                    Total = "275.25", 
+                    Tax = "27.52"
+                };
+
+                Attachment plAttachment = plCard.ToAttachment();
+                replyToConversation.Attachments.Add(plAttachment);
+
+                var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
+                if (reply != null)
+                    sb.AppendLine(reply.Message);
+            }
+            catch (HttpOperationException e)
+            {
+                Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
+            }
+
+            // reply to to everyone with a Carousel of three hero cards
+            try
+            {
+                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a fancy schmancy hero card"));
+                replyToConversation.Recipient = message.From;
+                replyToConversation.Type = "message";
+                replyToConversation.Attachments = new List<Attachment>();
+
+                Dictionary<string, string> cardContentList = new Dictionary<string, string>();
+                cardContentList.Add("PigLatin", "https://3.bp.blogspot.com/-7zDiZVD5kAk/T47LSvDM_jI/AAAAAAAAByM/AUhkdynaJ1Y/s200/i-speak-pig-latin.png");
+                cardContentList.Add("Pork Shoulder", "https://3.bp.blogspot.com/-_sl51G9E5io/TeFkYbJ2lDI/AAAAAAAAAL8/Ug_naHX6pAk/s400/porkshoulder.jpg");
+                cardContentList.Add("Bacon", "http://www.drinkamara.com/wp-content/uploads/2015/03/bacon_blog_post.jpg");
+
+                foreach(KeyValuePair<string, string> cardContent in cardContentList)
+                {
+                    List<CardImage> cardImages = new List<CardImage>();
+                    cardImages.Add(new CardImage(url:cardContent.Value ));
+
+                    List<CardAction> cardButtons = new List<CardAction>();
+
+                    CardAction plButton = new CardAction()
+                    {
+                        Value = $"https://en.wikipedia.org/wiki/{cardContent.Key}",
+                        Type = "openUrl",
+                        Title = "WikiPedia Page"
+                    };
+                    cardButtons.Add(plButton);
+
+                    HeroCard plCard = new HeroCard()
+                    {
+                        Title = translateToPigLatin($"I'm a hero card about {cardContent.Key}"),
+                        Subtitle = $"{cardContent.Key} Wikipedia Page",
+                        Images = cardImages,
+                        Buttons = cardButtons
+                    };
+
+                    Attachment plAttachment = plCard.ToAttachment();
+                    replyToConversation.Attachments.Add(plAttachment);
+                }
+
+                replyToConversation.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+
+                var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
+
+                if (reply != null)
+                    sb.AppendLine(reply.Message);
+            }
+            catch (HttpOperationException e)
+            {
+                Trace.TraceError("Failed to send broadcast without mention, error: {0}", e.InnerException.Message);
+            }
+
+
+            return message.CreateReply(translateToPigLatin("Completed CardTypesTest"));
         }
 
         private async Task<Activity> dataTypesTest(Activity message, ConnectorClient connector)
