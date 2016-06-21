@@ -92,8 +92,9 @@ namespace PigLatinBot
     private async Task<Activity> handleSystemMessagesAsync(Activity message, ConnectorClient connector)
         {
 
-            StateClient pigLatinStateClient = new StateClient(new Uri(message.ChannelId=="emulator"?message.ServiceUrl: "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
-            BotState botState = new BotState(pigLatinStateClient);
+            // StateClient pigLatinStateClient = new StateClient(new Uri(message.ChannelId=="emulator"?message.ServiceUrl: "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
+            StateClient sc = new StateClient(new MicrosoftAppCredentials());
+            BotState botState = new BotState(sc);
 
             Activity replyMessage = message.CreateReply();
             message.Locale = "en";
@@ -608,9 +609,9 @@ namespace PigLatinBot
         private async Task<Activity> dataTypesTest(Activity message, ConnectorClient connector)
         {
 
-            StateClient pigLatinStateClient = new StateClient(new Uri(message.ChannelId == "emulator" ? message.ServiceUrl : "https://intercom-api-scratch.azurewebsites.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            //StateClient sc = new StateClient(new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            BotState botState = new BotState(pigLatinStateClient);
+            //StateClient sc = new StateClient(new Uri(message.ChannelId == "emulator" ? message.ServiceUrl : "https://intercom-api-scratch.azurewebsites.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
+            StateClient sc = new StateClient(new MicrosoftAppCredentials());
+            BotState botState = new BotState(sc);
             StringBuilder sb = new StringBuilder();
             // DM a user 
             DateTime timestamp = DateTime.UtcNow;
