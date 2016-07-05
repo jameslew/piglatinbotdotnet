@@ -36,20 +36,21 @@ namespace PigLatinBot
         /// </summary>
         /// <param name="message"></param>
         [ResponseType(typeof(Activity))]
-        public virtual async Task<HttpResponseMessage> Post([FromBody] Activity message) //[Resolved in tonight's build]
+        public virtual async Task<HttpResponseMessage> Post([FromBody] Activity message) 
         {
-             //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            //ConnectorClient connector = new ConnectorClient(appId, appsecret);
-            //ConnectorClient connector = new ConnectorClient();
-            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
+            //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
+            //StateClient sc = new StateClient(new Uri(message.ChannelId == "emulator" ? message.ServiceUrl : "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
 
+            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
+            StateClient sc = new StateClient(new MicrosoftAppCredentials());
+            
             Activity replyMessage = message.CreateReply();
             replyMessage.Locale = "en-Us";
             replyMessage.TextFormat = TextFormatTypes.Plain;
 
             if (message.GetActivityType() != ActivityTypes.Message)
             {
-                replyMessage = await handleSystemMessagesAsync(message, connector);
+                replyMessage = await handleSystemMessagesAsync(message, connector, sc);
                 if (replyMessage != null)
                 {
                     var reply = await connector.Conversations.ReplyToActivityAsync(replyMessage);
@@ -64,7 +65,7 @@ namespace PigLatinBot
                 }
                 else if (message.Text.Contains("DataTypesTest"))
                 {
-                    Activity dtResult = await dataTypesTest(message, connector);
+                    Activity dtResult = await dataTypesTest(message, connector, sc);
                     await connector.Conversations.ReplyToActivityAsync(dtResult);
                 }
                 else if (message.Text.Contains("CardTypesTest"))
@@ -73,7 +74,7 @@ namespace PigLatinBot
                     await connector.Conversations.ReplyToActivityAsync(ctResult);
                 }
 
-                    try
+                try
                 {
                     replyMessage.Text = translateToPigLatin(message.Text);
                     var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
@@ -89,11 +90,8 @@ namespace PigLatinBot
             return responseOtherwise;
         }
 
-    private async Task<Activity> handleSystemMessagesAsync(Activity message, ConnectorClient connector)
+    private async Task<Activity> handleSystemMessagesAsync(Activity message, ConnectorClient connector, StateClient sc)
         {
-
-            // StateClient pigLatinStateClient = new StateClient(new Uri(message.ChannelId=="emulator"?message.ServiceUrl: "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
-            StateClient sc = new StateClient(new MicrosoftAppCredentials());
             BotState botState = new BotState(sc);
 
             Activity replyMessage = message.CreateReply();
@@ -467,7 +465,7 @@ namespace PigLatinBot
                 };
                 cardButtons.Add(plButton);
 
-                SigninCard plCard = new SigninCard(title: "You need to authorize me to access Spotify", button: plButton);
+                SigninCard plCard = new SigninCard( text:"You need to authorize me to access Spotify", buttons: cardButtons);
 
                 Attachment plAttachment = plCard.ToAttachment();
                 replyToConversation.Attachments.Add(plAttachment);
@@ -606,11 +604,9 @@ namespace PigLatinBot
             return message.CreateReply(translateToPigLatin("Completed CardTypesTest"));
         }
 
-        private async Task<Activity> dataTypesTest(Activity message, ConnectorClient connector)
+        private async Task<Activity> dataTypesTest(Activity message, ConnectorClient connector, StateClient sc)
         {
 
-            //StateClient sc = new StateClient(new Uri(message.ChannelId == "emulator" ? message.ServiceUrl : "https://intercom-api-scratch.azurewebsites.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            StateClient sc = new StateClient(new MicrosoftAppCredentials());
             BotState botState = new BotState(sc);
             StringBuilder sb = new StringBuilder();
             // DM a user 
