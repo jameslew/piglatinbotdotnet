@@ -7,14 +7,17 @@ using System.Threading.Tasks;
 using System.Web.Http;
 using System.Web.Http.Description;
 using Microsoft.Bot.Connector;
+using Microsoft.Bot.Builder.Dialogs;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Microsoft.Rest;
 using System.Diagnostics;
+using System.Configuration;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Web.Http.Controllers;
+
 
 namespace PigLatinBot
 {
@@ -28,6 +31,42 @@ namespace PigLatinBot
     //[BotAuthentication(OpenIdConfigurationUrl = "https://aps-dev-0-skype.cloudapp.net/v1/.well-known/openidconfiguration")]
     public class MessagesController : ApiController
     {
+        CancellationTokenSource _getTokenAsyncCancellation = new CancellationTokenSource();
+
+        protected void Application_Start()
+        {
+            GlobalConfiguration.Configure(WebApiConfig.Register);
+
+            var appID = ConfigurationManager.AppSettings["MicrosoftAppId"];
+            var appPassword = ConfigurationManager.AppSettings["MicrosoftAppPassword"];
+
+            if (!string.IsNullOrEmpty(appID) && !string.IsNullOrEmpty(appPassword))
+            {
+                var credentials = new MicrosoftAppCredentials(appID, appPassword);
+
+                Task.Factory.StartNew(async () =>
+                {
+                    while (!_getTokenAsyncCancellation.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            var token = await credentials.GetTokenAsync().ConfigureAwait(false);
+                        }
+                        catch (MicrosoftAppCredentials.OAuthException ex)
+                        {
+                            Trace.TraceError(ex.Message);
+                        }
+                        await Task.Delay(TimeSpan.FromMinutes(30), _getTokenAsyncCancellation.Token).ConfigureAwait(false);
+                    }
+                }).ConfigureAwait(false);
+            }
+        }
+
+        protected void Application_End()
+        {
+            _getTokenAsyncCancellation.Cancel();
+        }
+
         private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
 
         /// <summary>
@@ -35,16 +74,16 @@ namespace PigLatinBot
         /// receive a message from a user and reply to it, either directly or as an async delayed response
         /// </summary>
         /// <param name="message"></param>
-        [ResponseType(typeof(Activity))]
-        public virtual async Task<HttpResponseMessage> Post([FromBody] Activity message) 
+        [ResponseType(typeof(Microsoft.Bot.Connector.Activity))]
+        public virtual async Task<HttpResponseMessage> Post([FromBody] Microsoft.Bot.Connector.Activity message) 
         {
             //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
             //StateClient sc = new StateClient(new Uri(message.ChannelId == "emulator" ? message.ServiceUrl : "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
 
             ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
             StateClient sc = new StateClient(new MicrosoftAppCredentials());
-            
-            Activity replyMessage = message.CreateReply();
+
+            Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             replyMessage.Locale = "en-Us";
             replyMessage.TextFormat = TextFormatTypes.Plain;
 
@@ -60,17 +99,17 @@ namespace PigLatinBot
             {
                 if (message.Text.Contains("MessageTypesTest"))
                 {
-                    Activity mtResult = await messageTypesTest(message, connector);
+                    Microsoft.Bot.Connector.Activity mtResult = await messageTypesTest(message, connector);
                     await connector.Conversations.ReplyToActivityAsync(mtResult);
                 }
                 else if (message.Text.Contains("DataTypesTest"))
                 {
-                    Activity dtResult = await dataTypesTest(message, connector, sc);
+                    Microsoft.Bot.Connector.Activity dtResult = await dataTypesTest(message, connector, sc);
                     await connector.Conversations.ReplyToActivityAsync(dtResult);
                 }
                 else if (message.Text.Contains("CardTypesTest"))
                 {
-                    Activity ctResult = await cardTypesTest(message, connector);
+                    Microsoft.Bot.Connector.Activity ctResult = await cardTypesTest(message, connector);
                     await connector.Conversations.ReplyToActivityAsync(ctResult);
                 }
 
@@ -90,11 +129,11 @@ namespace PigLatinBot
             return responseOtherwise;
         }
 
-    private async Task<Activity> handleSystemMessagesAsync(Activity message, ConnectorClient connector, StateClient sc)
+    private async Task<Microsoft.Bot.Connector.Activity> handleSystemMessagesAsync(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, StateClient sc)
         {
             BotState botState = new BotState(sc);
 
-            Activity replyMessage = message.CreateReply();
+            Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             message.Locale = "en";
 
             switch (message.GetActivityType())
@@ -116,7 +155,7 @@ namespace PigLatinBot
 
                     foreach(ChannelAccount added in message.MembersAdded)
                     {
-                        Activity addedMessage = message.CreateReply();
+                        Microsoft.Bot.Connector.Activity addedMessage = message.CreateReply();
 
                         bool needToSendWelcomeText = false;
                         pigLatinBotUserData addedUserData = new pigLatinBotUserData();
@@ -184,7 +223,7 @@ namespace PigLatinBot
                     //maybe someone got removed
                     foreach (ChannelAccount removed in message.MembersRemoved)
                     {
-                        Activity removedMessage = message.CreateReply();
+                        Microsoft.Bot.Connector.Activity removedMessage = message.CreateReply();
                         removedMessage.Locale = "en";
 
                         removedMessage.Text = string.Format("{0}", removed.Name) + translateToPigLatin(" has Left the building");
@@ -279,14 +318,14 @@ namespace PigLatinBot
                 value.Length - removeFromEnd - removeFromStart);
         }
 
-        private async Task<Activity> messageTypesTest(Activity message, ConnectorClient connector)
+        private async Task<Microsoft.Bot.Connector.Activity> messageTypesTest(Microsoft.Bot.Connector.Activity message, ConnectorClient connector)
         {
 
             StringBuilder sb = new StringBuilder();
             // DM a user 
             try
             {
-                Activity newDirectToUser = new Activity()
+                Microsoft.Bot.Connector.Activity newDirectToUser = new Microsoft.Bot.Connector.Activity()
                 {
                     Text = "Should go directly to user",
                     Type = "message",
@@ -298,8 +337,6 @@ namespace PigLatinBot
                 var ConversationId = await connector.Conversations.CreateDirectConversationAsync(message.Recipient, message.From);
                 newDirectToUser.Conversation = new ConversationAccount(id: ConversationId.Id);
                 var reply = await connector.Conversations.SendToConversationAsync(newDirectToUser);
-                if (reply != null)
-                    sb.AppendLine(reply.Message);
             }
             catch (Exception e)
             {
@@ -332,10 +369,8 @@ namespace PigLatinBot
             // message to conversation not directed to user using CreateReply
             try
             {
-                Activity replyToConversation = message.CreateReply("Should go to conversation, but does not address the user that generated it");
+                Microsoft.Bot.Connector.Activity replyToConversation = message.CreateReply("Should go to conversation, but does not address the user that generated it");
                 var bcReply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-                if(bcReply != null)
-                    sb.AppendLine(bcReply.Message);
             }
             catch (HttpOperationException e)
             {
@@ -345,11 +380,9 @@ namespace PigLatinBot
             // reply to to user using CreateReply
             try
             {
-                Activity replyToConversation = message.CreateReply("Should go to conversation, but addressing the user that generated it");
+                Microsoft.Bot.Connector.Activity replyToConversation = message.CreateReply("Should go to conversation, but addressing the user that generated it");
                 replyToConversation.Recipient = message.From;
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-                if (reply != null)
-                    sb.AppendLine(reply.Message);
             }
             catch (HttpOperationException e)
             {
@@ -359,7 +392,7 @@ namespace PigLatinBot
             return message.CreateReply(translateToPigLatin("Completed MessageTypesTest"));
         }
 
-        private async Task<Activity> cardTypesTest(Activity message, ConnectorClient connector)
+        private async Task<Microsoft.Bot.Connector.Activity> cardTypesTest(Microsoft.Bot.Connector.Activity message, ConnectorClient connector)
         {
 
             StringBuilder sb = new StringBuilder();
@@ -367,7 +400,7 @@ namespace PigLatinBot
             // reply to to everyone with a PigLatin Hero Card
             try
             {
-                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a fancy schmancy hero card"));
+                Microsoft.Bot.Connector.Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a fancy schmancy hero card"));
                 replyToConversation.Recipient = message.From;
                 replyToConversation.Type = "message";
                 replyToConversation.Attachments = new List<Attachment>();
@@ -398,8 +431,6 @@ namespace PigLatinBot
                 replyToConversation.Attachments.Add(plAttachment);
 
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-                if (reply != null)
-                    sb.AppendLine(reply.Message);
             }
             catch (HttpOperationException e)
             {
@@ -409,7 +440,7 @@ namespace PigLatinBot
             // reply to to everyone with a PigLatin Thumbnail Card
             try
             {
-                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a smaller, but still fancy thumbnail card"));
+                Microsoft.Bot.Connector.Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a smaller, but still fancy thumbnail card"));
                 replyToConversation.Recipient = message.From;
                 replyToConversation.Type = "message";
                 replyToConversation.Attachments = new List<Attachment>();
@@ -439,8 +470,6 @@ namespace PigLatinBot
                 replyToConversation.Attachments.Add(plAttachment);
 
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-                if (reply != null)
-                    sb.AppendLine(reply.Message);
             }
             catch (HttpOperationException e)
             {
@@ -450,7 +479,7 @@ namespace PigLatinBot
             // reply to to everyone with a PigLatin Signin card
             try
             {
-                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, sign-in card"));
+                Microsoft.Bot.Connector.Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, sign-in card"));
                 replyToConversation.Recipient = message.From;
                 replyToConversation.Type = "message";
                 replyToConversation.Attachments = new List<Attachment>();
@@ -471,8 +500,6 @@ namespace PigLatinBot
                 replyToConversation.Attachments.Add(plAttachment);
 
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-                if (reply != null)
-                    sb.AppendLine(reply.Message);
             }
             catch (HttpOperationException e)
             {
@@ -483,7 +510,7 @@ namespace PigLatinBot
             // reply to to everyone with a PigLatin Receipt Card
             try
             {
-                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a smaller, but still fancy thumbnail card"));
+                Microsoft.Bot.Connector.Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a smaller, but still fancy thumbnail card"));
                 replyToConversation.Recipient = message.From;
                 replyToConversation.Type = "message";
                 replyToConversation.Attachments = new List<Attachment>();
@@ -540,8 +567,6 @@ namespace PigLatinBot
                 replyToConversation.Attachments.Add(plAttachment);
 
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-                if (reply != null)
-                    sb.AppendLine(reply.Message);
             }
             catch (HttpOperationException e)
             {
@@ -551,7 +576,7 @@ namespace PigLatinBot
             // reply to to everyone with a Carousel of three hero cards
             try
             {
-                Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a fancy schmancy hero card"));
+                Microsoft.Bot.Connector.Activity replyToConversation = message.CreateReply(translateToPigLatin("Should go to conversation, with a fancy schmancy hero card"));
                 replyToConversation.Recipient = message.From;
                 replyToConversation.Type = "message";
                 replyToConversation.Attachments = new List<Attachment>();
@@ -591,9 +616,6 @@ namespace PigLatinBot
                 replyToConversation.AttachmentLayout = AttachmentLayoutTypes.Carousel;
 
                 var reply = await connector.Conversations.SendToConversationAsync(replyToConversation);
-
-                if (reply != null)
-                    sb.AppendLine(reply.Message);
             }
             catch (HttpOperationException e)
             {
@@ -604,7 +626,7 @@ namespace PigLatinBot
             return message.CreateReply(translateToPigLatin("Completed CardTypesTest"));
         }
 
-        private async Task<Activity> dataTypesTest(Activity message, ConnectorClient connector, StateClient sc)
+        private async Task<Microsoft.Bot.Connector.Activity> dataTypesTest(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, StateClient sc)
         {
 
             BotState botState = new BotState(sc);
