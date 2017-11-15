@@ -8,16 +8,21 @@ using System.Web.Http;
 using System.Web.Http.Description;
 using Microsoft.Bot.Connector;
 using Microsoft.Bot.Builder.Dialogs;
+using Microsoft.Bot.Builder.Azure;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Microsoft.Rest;
 using System.Diagnostics;
 using System.Configuration;
 using System.Text;
+using Microsoft.ApplicationInsights;
 using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Web.Http.Controllers;
-
+using Microsoft.Azure;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.Bot.Builder.Dialogs.Internals;
 
 namespace PigLatinBot
 {
@@ -81,7 +86,10 @@ namespace PigLatinBot
             //StateClient sc = new StateClient(new Uri(message.ChannelId == "emulator" ? message.ServiceUrl : "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
 
             ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
-            StateClient sc = new StateClient(new MicrosoftAppCredentials());
+            //            StateClient sc = new StateClient(new MicrosoftAppCredentials());
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("<storage-account-name>_AzureStorageConnectionString"));
+
+            TableBotDataStore botStateStore = new TableBotDataStore(storageAccount, "botdata");
 
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             replyMessage.Locale = "en-Us";
@@ -89,7 +97,7 @@ namespace PigLatinBot
 
             if (message.GetActivityType() != ActivityTypes.Message)
             {
-                replyMessage = await handleSystemMessagesAsync(message, connector, sc);
+                replyMessage = await handleSystemMessagesAsync(message, connector, botStateStore);
                 if (replyMessage != null)
                 {
                     var reply = await connector.Conversations.ReplyToActivityAsync(replyMessage);
@@ -104,7 +112,7 @@ namespace PigLatinBot
                 }
                 else if (message.Text.Contains("DataTypesTest"))
                 {
-                    Microsoft.Bot.Connector.Activity dtResult = await dataTypesTest(message, connector, sc);
+                    Microsoft.Bot.Connector.Activity dtResult = await dataTypesTest(message, connector, botStateStore);
                     await connector.Conversations.ReplyToActivityAsync(dtResult);
                 }
                 else if (message.Text.Contains("CardTypesTest"))
@@ -129,21 +137,21 @@ namespace PigLatinBot
             return responseOtherwise;
         }
 
-    private async Task<Microsoft.Bot.Connector.Activity> handleSystemMessagesAsync(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, StateClient sc)
+    private async Task<Microsoft.Bot.Connector.Activity> handleSystemMessagesAsync(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, TableBotDataStore botStateStore)
         {
-            BotState botState = new BotState(sc);
-
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             message.Locale = "en";
+            IBotDataStore<BotData> dataStore = botStateStore;
 
             switch (message.GetActivityType())
             {
                 case ActivityTypes.DeleteUserData:
                     //In this case the DeleteUserData message comes from the user so we can clear the data and set it back directly
-                    BotData currentBotData = (BotData) await botState.GetUserDataAsync(message.ChannelId, message.From.Id);
+ 
+                    BotData currentBotData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
                     pigLatinBotUserData deleteUserData = new pigLatinBotUserData();
                     currentBotData.SetProperty("v1", deleteUserData);
-                    await botState.SetUserDataAsync(message.ChannelId, message.From.Id, currentBotData);
+                    await dataStore.SaveAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, currentBotData, default(CancellationToken));
                     
                     replyMessage.Text = translateToPigLatin("I have deleted your data oh masterful one");
                     Trace.TraceInformation("Clearing user's BotUserData");
@@ -172,7 +180,7 @@ namespace PigLatinBot
                         // okay, check for real users
                         try
                         {
-                            botData = (BotData) await botState.GetUserDataAsync(message.ChannelId, added.Id);
+                             botData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, added.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
                         }
                         catch (Exception e)
                         {
@@ -207,7 +215,8 @@ namespace PigLatinBot
                             try
                             {
                                 botData.SetProperty("v1", addedUserData);
-                                var response = await botState.SetUserDataAsync(message.ChannelId, added.Id, botData);
+                                await dataStore.SaveAsync(new Address(message.Recipient.Id, message.ChannelId, added.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, botData, default(CancellationToken));
+
                             }
                             catch (Exception e)
                             {
@@ -626,10 +635,14 @@ namespace PigLatinBot
             return message.CreateReply(translateToPigLatin("Completed CardTypesTest"));
         }
 
-        private async Task<Microsoft.Bot.Connector.Activity> dataTypesTest(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, StateClient sc)
+        private async Task<Microsoft.Bot.Connector.Activity> dataTypesTest(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, TableBotDataStore botStateStore)
         {
+            IBotDataStore<BotData> dataStore = botStateStore;
+            pigLatinBotUserData deleteUserData = new pigLatinBotUserData();
 
-            BotState botState = new BotState(sc);
+
+
+
             StringBuilder sb = new StringBuilder();
             // DM a user 
             DateTime timestamp = DateTime.UtcNow;
@@ -638,7 +651,7 @@ namespace PigLatinBot
             BotData botData = new BotData();
             try
             {
-                botData = (BotData)await botState.GetUserDataAsync(message.ChannelId, message.From.Id);
+                botData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
             }
             catch (Exception e)
             {
@@ -659,7 +672,8 @@ namespace PigLatinBot
             try
             {
                 botData.SetProperty("v1", addedUserData);
-                var response = await botState.SetUserDataAsync(message.ChannelId, message.From.Id, botData);
+                await dataStore.SaveAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, botData, default(CancellationToken));
+
             }
             catch (Exception e)
             {
@@ -668,7 +682,7 @@ namespace PigLatinBot
 
             try
             {
-                botData = (BotData)await botState.GetUserDataAsync(message.ChannelId, message.From.Id);
+                botData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
             }
             catch (Exception e)
             {
