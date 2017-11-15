@@ -38,12 +38,18 @@ namespace PigLatinBot
     {
         CancellationTokenSource _getTokenAsyncCancellation = new CancellationTokenSource();
 
+        CloudStorageAccount storageAccount;
+        TableBotDataStore botStateStore;
+
         protected void Application_Start()
         {
             GlobalConfiguration.Configure(WebApiConfig.Register);
 
             var appID = ConfigurationManager.AppSettings["MicrosoftAppId"];
             var appPassword = ConfigurationManager.AppSettings["MicrosoftAppPassword"];
+
+            storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
+            botStateStore = new TableBotDataStore(storageAccount, "botdata");
 
             if (!string.IsNullOrEmpty(appID) && !string.IsNullOrEmpty(appPassword))
             {
@@ -83,14 +89,8 @@ namespace PigLatinBot
         public virtual async Task<HttpResponseMessage> Post([FromBody] Microsoft.Bot.Connector.Activity message) 
         {
             //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            //StateClient sc = new StateClient(new Uri(message.ChannelId == "emulator" ? message.ServiceUrl : "https://intercom-api-scratch.azurewebsites.net"), new MicrosoftAppCredentials());
-
             ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
-            //            StateClient sc = new StateClient(new MicrosoftAppCredentials());
-            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
-
-            TableBotDataStore botStateStore = new TableBotDataStore(storageAccount, "botdata");
-
+            
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             replyMessage.Locale = "en-Us";
             replyMessage.TextFormat = TextFormatTypes.Plain;
