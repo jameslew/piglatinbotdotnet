@@ -10,7 +10,6 @@ using Microsoft.Bot.Connector;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.Azure;
 using System.Collections.Generic;
-using Newtonsoft.Json;
 using Microsoft.Rest;
 using System.Diagnostics;
 using System.Configuration;
@@ -36,48 +35,8 @@ namespace PigLatinBot
     //[BotAuthentication(OpenIdConfigurationUrl = "https://aps-dev-0-skype.cloudapp.net/v1/.well-known/openidconfiguration")]
     public class MessagesController : ApiController
     {
-        CancellationTokenSource _getTokenAsyncCancellation = new CancellationTokenSource();
-
-        CloudStorageAccount storageAccount;
-        TableBotDataStore botStateStore;
-
-        protected void Application_Start()
-        {
-            GlobalConfiguration.Configure(WebApiConfig.Register);
-
-            var appID = ConfigurationManager.AppSettings["MicrosoftAppId"];
-            var appPassword = ConfigurationManager.AppSettings["MicrosoftAppPassword"];
-
-            storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
-            botStateStore = new TableBotDataStore(storageAccount, "botdata");
-
-            if (!string.IsNullOrEmpty(appID) && !string.IsNullOrEmpty(appPassword))
-            {
-                var credentials = new MicrosoftAppCredentials(appID, appPassword);
-
-                Task.Factory.StartNew(async () =>
-                {
-                    while (!_getTokenAsyncCancellation.IsCancellationRequested)
-                    {
-                        try
-                        {
-                            var token = await credentials.GetTokenAsync().ConfigureAwait(false);
-                        }
-                        catch (MicrosoftAppCredentials.OAuthException ex)
-                        {
-                            Trace.TraceError(ex.Message);
-                        }
-                        await Task.Delay(TimeSpan.FromMinutes(30), _getTokenAsyncCancellation.Token).ConfigureAwait(false);
-                    }
-                }).ConfigureAwait(false);
-            }
-        }
-
-        protected void Application_End()
-        {
-            _getTokenAsyncCancellation.Cancel();
-        }
-
+        private CloudStorageAccount storageAccount;
+        private TableBotDataStore botStateStore;
         private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
 
         /// <summary>
@@ -92,6 +51,8 @@ namespace PigLatinBot
             ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
             IBotDataStore<BotData> dataStore = botStateStore;
+            storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
+            botStateStore = new TableBotDataStore(storageAccount, "botdata");
 
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             replyMessage.Locale = "en-Us";
