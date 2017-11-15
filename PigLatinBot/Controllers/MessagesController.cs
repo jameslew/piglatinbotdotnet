@@ -90,7 +90,10 @@ namespace PigLatinBot
         {
             //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
             ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
-            
+
+            IBotDataStore<BotData> dataStore = botStateStore;
+            BotData currentBotData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
+
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             replyMessage.Locale = "en-Us";
             replyMessage.TextFormat = TextFormatTypes.Plain;
@@ -123,6 +126,15 @@ namespace PigLatinBot
 
                 try
                 {
+                    if(await isNewUser(message.From.Id, message, botStateStore))
+                    {
+                        Microsoft.Bot.Connector.Activity introMessage = message.CreateReply();
+                        introMessage.Locale = "en-Us";
+                        introMessage.TextFormat = TextFormatTypes.Plain;
+
+                        introMessage.Text = string.Format(translateToPigLatin("Hey there, I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", added.Name);
+                        var reply = await connector.Conversations.ReplyToActivityAsync(introMessage);
+                    }
                     replyMessage.Text = translateToPigLatin(message.Text);
                     var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
                 }
@@ -136,8 +148,38 @@ namespace PigLatinBot
             var responseOtherwise = Request.CreateResponse(HttpStatusCode.OK);
             return responseOtherwise;
         }
+        
+        private async Task<bool> isNewUser(string userId, Microsoft.Bot.Connector.Activity message, TableBotDataStore botStateStore)
+        {
+            IBotDataStore<BotData> dataStore = botStateStore;
+            pigLatinBotUserData addedUserData = new pigLatinBotUserData();
+            BotData botData = new BotData();
 
-    private async Task<Microsoft.Bot.Connector.Activity> handleSystemMessagesAsync(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, TableBotDataStore botStateStore)
+            try
+            {
+                botData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, userId, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
+            }
+            catch (Exception e)
+            {
+                if (e.Message == "Resource not found")
+                { }
+                else
+                    throw e;
+            }
+
+            if (botData == null)
+                botData = new BotData(eTag: "*");
+
+            addedUserData = botData.GetProperty<pigLatinBotUserData>("v1") ?? new pigLatinBotUserData();
+
+            if (addedUserData.isNewUser == true)
+            {
+                return true;
+            }
+            else return false;
+        }
+
+        private async Task<Microsoft.Bot.Connector.Activity> handleSystemMessagesAsync(Microsoft.Bot.Connector.Activity message, ConnectorClient connector, TableBotDataStore botStateStore)
         {
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             message.Locale = "en";
@@ -147,7 +189,7 @@ namespace PigLatinBot
             {
                 case ActivityTypes.DeleteUserData:
                     //In this case the DeleteUserData message comes from the user so we can clear the data and set it back directly
- 
+
                     BotData currentBotData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
                     pigLatinBotUserData deleteUserData = new pigLatinBotUserData();
                     currentBotData.SetProperty("v1", deleteUserData);
@@ -177,26 +219,8 @@ namespace PigLatinBot
                             continue;
                         }
                         
-                        // okay, check for real users
-                        try
-                        {
-                             botData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, added.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
-                        }
-                        catch (Exception e)
-                        {
-                            if (e.Message == "Resource not found")
-                            { }
-                            else
-                                throw e;
-                        }
-    
-                        if(botData == null)
-                            botData = new BotData(eTag: "*");
-
-                        addedUserData = botData.GetProperty<pigLatinBotUserData>("v1") ?? new pigLatinBotUserData();
-
-                        if (addedUserData.isNewUser == true)
-                        {
+                        if(await isNewUser(added.Id, message, botStateStore))
+                        { 
                             addedUserData.isNewUser = false;
                             needToSendWelcomeText = true;
                         }
