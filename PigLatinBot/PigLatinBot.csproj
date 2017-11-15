@@ -25,7 +25,8 @@
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
     <TargetFrameworkProfile />
-    <ApplicationInsightsResourceId>/subscriptions/582f5f46-8ec1-46d6-9765-6aba9f4baeda/resourcegroups/Default-Web-WestUS/providers/microsoft.insights/components/PigLatinBot</ApplicationInsightsResourceId>
+    <ApplicationInsightsResourceId>/subscriptions/6b56325e-a4ca-40f2-86d9-8fb75cc87daa/resourcegroups/BFLatencyTest/providers/microsoft.insights/components/BFLatencyTestauw6xw</ApplicationInsightsResourceId>
+    <ApplicationInsightsAnnotationResourceId>/subscriptions/582f5f46-8ec1-46d6-9765-6aba9f4baeda/resourcegroups/Default-Web-WestUS/providers/microsoft.insights/components/PigLatinBot</ApplicationInsightsAnnotationResourceId>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
