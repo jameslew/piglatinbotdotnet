@@ -92,7 +92,6 @@ namespace PigLatinBot
             ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
             IBotDataStore<BotData> dataStore = botStateStore;
-            BotData currentBotData = (BotData)await dataStore.LoadAsync(new Address(message.Recipient.Id, message.ChannelId, message.From.Id, message.Conversation.Id, message.ServiceUrl), BotStoreType.BotUserData, default(CancellationToken));
 
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
             replyMessage.Locale = "en-Us";
