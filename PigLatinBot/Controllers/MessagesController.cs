@@ -86,7 +86,8 @@ namespace PigLatinBot
 
                 try
                 {
-                    if(await isNewUser(message.From.Id, message, botStateStore))
+                    /*
+                     * if(await isNewUser(message.From.Id, message, botStateStore))
                     {
                         Microsoft.Bot.Connector.Activity introMessage = message.CreateReply();
                         introMessage.Locale = "en-Us";
@@ -97,6 +98,7 @@ namespace PigLatinBot
                         var reply = await connector.Conversations.ReplyToActivityAsync(introMessage);
                     }
                     //replyMessage.Text = translateToPigLatin(message.Text);
+                    */
                     replyMessage.Text = message.Text;
                     replyMessage.InputHint = InputHints.AcceptingInput;
                     var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
