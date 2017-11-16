@@ -96,7 +96,8 @@ namespace PigLatinBot
                         introMessage.Text = string.Format(translateToPigLatin("Hey there, I'm PigLatinBot. I make intelligible text unintelligible.  Ask me how by typing 'Help', and for terms and info, click ") + "[erehay](http://www.piglatinbot.com)", message.From.Name);
                         var reply = await connector.Conversations.ReplyToActivityAsync(introMessage);
                     }
-                    replyMessage.Text = translateToPigLatin(message.Text);
+                    //replyMessage.Text = translateToPigLatin(message.Text);
+                    replyMessage.Text = message.Text;
                     replyMessage.InputHint = InputHints.AcceptingInput;
                     var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
                 }
