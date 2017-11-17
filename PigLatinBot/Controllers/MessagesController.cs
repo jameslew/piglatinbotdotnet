@@ -99,6 +99,7 @@ namespace PigLatinBot
                     }
                     replyMessage.InputHint = InputHints.AcceptingInput;
                     replyMessage.Speak = message.Text;
+                    replyMessage.Text = translateToPigLatin(message.Text);
                     var httpResponse = await connector.Conversations.ReplyToActivityAsync(replyMessage);
                 }
                 catch (HttpResponseException e)
