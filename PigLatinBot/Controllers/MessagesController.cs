@@ -31,8 +31,8 @@ namespace PigLatinBot
         public DateTime lastReadLegalese = DateTime.MinValue;
     }
 
-    [BotAuthentication]
-    //[BotAuthentication(OpenIdConfigurationUrl = "https://aps-dev-0-skype.cloudapp.net/v1/.well-known/openidconfiguration")]
+    //[BotAuthentication]
+    [BotAuthentication(OpenIdConfigurationUrl = "https://aps-dev-0-skype.cloudapp.net/v1/.well-known/openidconfiguration")]
     public class MessagesController : ApiController
     {
         private CloudStorageAccount storageAccount;
@@ -47,8 +47,8 @@ namespace PigLatinBot
         [ResponseType(typeof(Microsoft.Bot.Connector.Activity))]
         public virtual async Task<HttpResponseMessage> Post([FromBody] Microsoft.Bot.Connector.Activity message) 
         {
-            //ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
+            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
+            //ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
             IBotDataStore<BotData> dataStore = botStateStore;
             storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
