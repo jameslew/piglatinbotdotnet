@@ -49,7 +49,7 @@ namespace PigLatinBot
         {
             ConnectorClient connector = new ConnectorClient(new Uri("http://intercom-api-scratch.azurewebsites.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
 //            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
+            //ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
             IBotDataStore<BotData> dataStore = botStateStore;
             storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
