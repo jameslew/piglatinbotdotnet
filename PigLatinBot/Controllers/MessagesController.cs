@@ -47,8 +47,9 @@ namespace PigLatinBot
         [ResponseType(typeof(Microsoft.Bot.Connector.Activity))]
         public virtual async Task<HttpResponseMessage> Post([FromBody] Microsoft.Bot.Connector.Activity message) 
         {
-            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
-            //ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
+            ConnectorClient connector = new ConnectorClient(new Uri("http://intercom-api-scratch.azurewebsites.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
+//            ConnectorClient connector = new ConnectorClient(new Uri("https://intercomScratch.azure-api.net"), new Microsoft.Bot.Connector.MicrosoftAppCredentials());
+            ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
             IBotDataStore<BotData> dataStore = botStateStore;
             storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
@@ -131,7 +132,7 @@ namespace PigLatinBot
                     throw e;
             }
 
-            if (botData == null)
+            if (botData.Data == null)
                 botData = new BotData(eTag: "*");
 
             addedUserData = botData.GetProperty<pigLatinBotUserData>("v1") ?? new pigLatinBotUserData();

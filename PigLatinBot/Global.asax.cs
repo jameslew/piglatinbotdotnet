@@ -27,7 +27,7 @@ namespace PigLatinBot
 
             var appID = ConfigurationManager.AppSettings["MicrosoftAppId"];
             var appPassword = ConfigurationManager.AppSettings["MicrosoftAppPassword"];
-            Trace.WriteLine("Application Started");
+            //Trace.WriteLine("Application Started");
 
             if (!string.IsNullOrEmpty(appID) && !string.IsNullOrEmpty(appPassword))
             {
