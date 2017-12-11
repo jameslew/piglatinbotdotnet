@@ -39,6 +39,7 @@ namespace PigLatinBot
         private TableBotDataStore botStateStore;
         private DateTime lastModifiedPolicies = DateTime.Parse("2015-10-01");
 
+
         /// <summary>
         /// POST: api/Messages
         /// receive a message from a user and reply to it, either directly or as an async delayed response
