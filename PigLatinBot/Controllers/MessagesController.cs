@@ -32,7 +32,7 @@ namespace PigLatinBot
     }
 
     //[BotAuthentication]
-    [BotAuthentication(OpenIdConfigurationUrl = "https://intercom-api-ppe.azurewebsites.net/v1/.well-known/openidconfiguration")]
+    [BotAuthentication(OpenIdConfigurationUrl = "https://intercom-api-scratch.azurewebsites.net/v1/.well-known/openidconfiguration")]
     public class MessagesController : ApiController
     {
         private CloudStorageAccount storageAccount;
