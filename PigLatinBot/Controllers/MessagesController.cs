@@ -51,7 +51,7 @@ namespace PigLatinBot
             ConnectorClient connector = new ConnectorClient(new Uri(message.ServiceUrl));
 
             IBotDataStore<BotData> dataStore = botStateStore;
-            storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("bfLatency_AzureStorageConnectionString"));
+            storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("piglatinbotsjameslew_AzureStorageConnectionString"));
             botStateStore = new TableBotDataStore(storageAccount, "botdata");
 
             Microsoft.Bot.Connector.Activity replyMessage = message.CreateReply();
